@@ -1769,6 +1769,7 @@ int security_inode_init_security_anon(struct inode *inode,
 	return call_int_hook(inode_init_security_anon, inode, name,
 			     context_inode);
 }
+EXPORT_SYMBOL_GPL(security_path_rmdir);
 
 #ifdef CONFIG_SECURITY_PATH
 /**
@@ -1805,6 +1806,7 @@ void security_path_post_mknod(struct mnt_idmap *idmap, struct dentry *dentry)
 		return;
 	call_void_hook(path_post_mknod, idmap, dentry);
 }
+EXPORT_SYMBOL_GPL(security_path_symlink);
 
 /**
  * security_path_mkdir() - Check if creating a new directory is allowed
@@ -1840,6 +1842,7 @@ int security_path_rmdir(const struct path *dir, struct dentry *dentry)
 		return 0;
 	return call_int_hook(path_rmdir, dir, dentry);
 }
+EXPORT_SYMBOL_GPL(security_path_link);
 
 /**
  * security_path_unlink() - Check if removing a hard link is allowed
@@ -1875,6 +1878,7 @@ int security_path_symlink(const struct path *dir, struct dentry *dentry,
 		return 0;
 	return call_int_hook(path_symlink, dir, dentry, old_name);
 }
+EXPORT_SYMBOL_GPL(security_path_chmod);
 
 /**
  * security_path_link - Check if creating a hard link is allowed
@@ -1893,6 +1897,7 @@ int security_path_link(struct dentry *old_dentry, const struct path *new_dir,
 		return 0;
 	return call_int_hook(path_link, old_dentry, new_dir, new_dentry);
 }
+EXPORT_SYMBOL_GPL(security_path_chown);
 
 /**
  * security_path_rename() - Check if renaming a file is allowed
@@ -2106,6 +2111,7 @@ int security_inode_rmdir(struct inode *dir, struct dentry *dentry)
 		return 0;
 	return call_int_hook(inode_rmdir, dir, dentry);
 }
+EXPORT_SYMBOL_GPL(security_inode_permission);
 
 /**
  * security_inode_mknod() - Check if creating a special file is allowed
@@ -2572,6 +2578,7 @@ int security_inode_setsecurity(struct inode *inode, const char *name,
 	return call_int_hook(inode_setsecurity, inode, name, value, size,
 			     flags);
 }
+EXPORT_SYMBOL_GPL(security_file_permission);
 
 /**
  * security_inode_listsecurity() - List the xattr security label names
@@ -2847,6 +2854,7 @@ int security_mmap_addr(unsigned long addr)
 {
 	return call_int_hook(mmap_addr, addr);
 }
+EXPORT_SYMBOL_GPL(security_file_truncate);
 
 /**
  * security_file_mprotect() - Check if changing memory protections is allowed
