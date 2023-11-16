@@ -223,8 +223,7 @@
 	};
 
 	eth0_pins: eth0 {
-		pinmux = <RZG2L_PORT_PINMUX(28, 1, 1)>, /* ET0_LINKSTA */
-			 <RZG2L_PORT_PINMUX(27, 1, 1)>, /* ET0_MDC */
+		pinmux = <RZG2L_PORT_PINMUX(27, 1, 1)>, /* ET0_MDC */
 			 <RZG2L_PORT_PINMUX(28, 0, 1)>, /* ET0_MDIO */
 			 <RZG2L_PORT_PINMUX(20, 0, 1)>, /* ET0_TXC */
 			 <RZG2L_PORT_PINMUX(20, 1, 1)>, /* ET0_TX_CTL */
@@ -263,13 +262,6 @@
 	i2c1_pins: i2c1 {
 		pins = "RIIC1_SDA", "RIIC1_SCL";
 		input-enable;
-	};
-
-	gpio-sd0-pwr-en-hog {
-		gpio-hog;
-		gpios = <RZG2L_GPIO(4, 1) GPIO_ACTIVE_HIGH>;
-		output-high;
-		line-name = "gpio_sd0_pwr_en";
 	};
 
 	scif0_pins: scif0 {
@@ -683,7 +675,7 @@
 	pinctrl-names = "default";
 	channel = "both_AB";
 	poeg = <&poega &poegb &poegc &poegd>;
-	status = "okay";
+	status = "disabled";
 };
 
 &ssi0 {
@@ -697,5 +689,5 @@
 	pinctrl-0 = <&ssi1_pins>;
 	pinctrl-names = "default";
 
-	status = "okay";
+	status = "disabled";
 };
