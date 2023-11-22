@@ -436,7 +436,7 @@ int mnt_get_write_access_file(struct file *file)
 	}
 	return mnt_get_write_access(file->f_path.mnt);
 }
-EXPORT_SYMBOL_GPL(__mnt_drop_write);
+EXPORT_SYMBOL_GPL(mnt_put_write_access_file);
 
 /**
  * mnt_want_write_file - get write access to a file's mount

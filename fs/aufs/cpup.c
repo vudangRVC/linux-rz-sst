@@ -133,8 +133,8 @@ void au_dtime_store(struct au_dtime *dt, struct dentry *dentry,
 	dt->dt_dentry = dentry;
 	dt->dt_h_path = *h_path;
 	h_inode = d_inode(h_path->dentry);
-	dt->dt_atime = h_inode->i_atime;
-	dt->dt_mtime = h_inode->i_mtime;
+	dt->dt_atime = h_inode->__i_atime;
+	dt->dt_mtime = h_inode->__i_mtime;
 	/* smp_mb(); */
 }
 
@@ -200,8 +200,8 @@ int cpup_iattr(struct dentry *dst, aufs_bindex_t bindex, struct path *h_src,
 	} else {
 		ia.ia_uid = h_isrc->i_uid;
 		ia.ia_gid = h_isrc->i_gid;
-		ia.ia_atime = h_isrc->i_atime;
-		ia.ia_mtime = h_isrc->i_mtime;
+		ia.ia_atime = h_isrc->__i_atime;
+		ia.ia_mtime = h_isrc->__i_mtime;
 		if (h_idst->i_mode != h_isrc->i_mode
 		    && !S_ISLNK(h_idst->i_mode)) {
 			ia.ia_valid |= ATTR_MODE;
