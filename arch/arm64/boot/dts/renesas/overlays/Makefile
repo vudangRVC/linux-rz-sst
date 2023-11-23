@@ -3,3 +3,4 @@
 # required for overlay support
 DTC_FLAGS += -@
 
+dtb-y += rzpi-ext-i2c.dtbo
