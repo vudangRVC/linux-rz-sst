@@ -1610,6 +1610,13 @@ static int da7219_hw_params(struct snd_pcm_substream *substream,
 		}
 	}
 
+	/* Enable preconfigured system modes by default */
+	regmap_write(da7219->regmap, DA7219_SYSTEM_MODES_OUTPUT, 0xF1);
+	regmap_write(da7219->regmap, DA7219_SYSTEM_MODES_INPUT, 0x55);
+
+	/* Enabled DAI */
+	regmap_write(da7219->regmap, DA7219_DAI_CTRL, 0x80);
+
 	/*
 	 * If we're master, then we have a limited set of BCLK rates we
 	 * support. For slave mode this isn't the case and the codec can detect

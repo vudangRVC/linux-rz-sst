@@ -12,8 +12,6 @@
 #include <linux/regmap.h>
 #include <linux/slab.h>
 
-#define NUM_CONFIG_REGISTERS	37
-
 /* VC3 Input mux settings */
 #define VC3_X1		BIT(0)
 #define VC3_CLKINB	BIT(1)
@@ -836,17 +834,19 @@ static void vc3_mux_type_parse_dt(struct device *dev,
 
 }
 
+#define NUM_CONFIG_REGISTERS 37
+
 static int vc3_probe(struct i2c_client *client,
 		     const struct i2c_device_id *id)
 {
 	struct vc3_driver_data *vc3;
+	struct device *dev = &client->dev;
 	const char *parent_names[2];
 	const char *pll_parent_names[3];
 	struct clk_init_data init;
-	u8 settings[NUM_CONFIG_REGISTERS];
 	int ret, i;
+	u8 settings[NUM_CONFIG_REGISTERS];
 	u32 crit_clks[6] = {};
-	struct device *dev = &client->dev;
 
 	vc3 = devm_kzalloc(&client->dev, sizeof(*vc3), GFP_KERNEL);
 	if (!vc3)
@@ -869,22 +869,35 @@ static int vc3_probe(struct i2c_client *client,
 		return PTR_ERR(vc3->regmap);
 	}
 
+	/* The following writes should move to bootloader */
+	/*
+	regmap_write(vc3->regmap, 0x11, 0x14);
+	regmap_write(vc3->regmap, 0x12, 0x7a);
+	regmap_write(vc3->regmap, 0x13, 0xe1);
+	regmap_write(vc3->regmap, 0x1b, 0xbb);
+	regmap_write(vc3->regmap, 0x1d, 0x30);
+	regmap_write(vc3->regmap, 0x1f, 0xb6);
+	regmap_write(vc3->regmap, 0x24, 0x95);
+	*/
+
+	/* Renesas setting */
 	ret = of_property_read_u8_array(dev->of_node, "renesas,settings",
 					settings, ARRAY_SIZE(settings));
+
 	if (!ret) {
 		/*
-		* A raw settings array was specified in the DT. Write the
-		* settings to the device immediately.
-		*/
+		 *  A raw settings array was specified in the DT. Write the
+		 *  settings to the device immediately.
+		 */
 		for  (i = 0; i < NUM_CONFIG_REGISTERS; i++) {
 			ret = regmap_write(vc3->regmap, i, settings[i]);
 			if (ret) {
-				dev_err(dev, "error writing to chip (%i)\n", ret);
+				dev_err(&client->dev, "error writing to chip (%i)\n", ret);
 				return ret;
 			}
 		}
 	} else if (ret == -EOVERFLOW) {
-		dev_err(&client->dev, "EOVERFLOW reg settings. ARRAY_SIZE: %zu",
+		dev_err(&client->dev, "EOVERFLOW reg settings. ARRAY_SIZE: %zu\n",
 			ARRAY_SIZE(settings));
 		return ret;
 	}
