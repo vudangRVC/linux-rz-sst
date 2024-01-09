@@ -1,0 +1,23 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Copyright (C) 2023 Renesas Electronics Corporation
+ */
+
+/dts-v1/;
+/plugin/;
+
+&dsi0 {
+	status = "okay";
+};
+
+&mipi_panel {
+	status = "okay";
+};
+
+&gpt5 {
+	status = "okay";
+};
+
+&backlight {
+	status = "okay";
+};

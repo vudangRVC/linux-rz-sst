@@ -160,6 +160,15 @@
 		};
 	};
 
+	/* brightness control */
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&gpt5 0 40000 0>;
+		brightness-levels = <0 8 32 64 96 128 160 192 224 255>;
+		default-brightness-level = <8>;
+		status = "disabled";
+	};
+
 	x1_clk: x1-clock {
 		compatible = "fixed-clock";
 		#clock-cells = <0>;
@@ -438,6 +447,10 @@
 	gpt4_pins: gpt4 {
 		pinmux = <RZG2L_PORT_PINMUX(43, 0, 2)>, /* Channel A */
 			 <RZG2L_PORT_PINMUX(43, 1, 2)>; /* Channel B */
+	};
+
+	gpt5_pins: gpt5 {
+		pinmux = <RZG2L_PORT_PINMUX(43, 2, 2)>; /* Channel A */
 	};
 };
 
@@ -813,4 +826,42 @@
 	pinctrl-names = "default";
 
 	status = "okay";
+};
+
+&gpt5 {
+	pinctrl-0 = <&gpt5_pins>;
+	pinctrl-names = "default";
+	channel="channel_A";
+	poeg = <&poegd>;
+	status = "disabled";
+};
+
+&dsi0 {
+	status = "disabled";
+	#address-cells = <1>;
+	#size-cells = <0>;
+
+	ports {
+		port@1 {
+			dsi0_out: endpoint {
+				remote-endpoint = <&panel_in>;
+				data-lanes = <1 2>;
+			};
+		};
+	};
+
+	mipi_panel: panel@0 {
+		compatible = "ilitek,ph720128t003";
+		reg = <0>;
+		power-gpios = <&pinctrl RZG2L_GPIO(4, 1) GPIO_ACTIVE_HIGH>;
+		switch-gpios = <&pinctrl RZG2L_GPIO(4, 0) GPIO_ACTIVE_HIGH>;
+		backlight = <&backlight>;
+		status = "disabled";
+
+		port {
+			panel_in: endpoint {
+				remote-endpoint = <&dsi0_out>;
+			};
+		};
+	};
 };
