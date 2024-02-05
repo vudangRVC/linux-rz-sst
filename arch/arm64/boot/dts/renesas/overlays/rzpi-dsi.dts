@@ -10,14 +10,15 @@
 	status = "okay";
 };
 
+// enable 5inch Waveshare panel (Raspberry Pi compatible)
 &mipi_panel {
 	status = "okay";
 };
 
-&gpt5 {
+&rzsbc_mcu {
 	status = "okay";
 };
 
-&backlight {
+&rzsbc_ft5406 {
 	status = "okay";
 };
