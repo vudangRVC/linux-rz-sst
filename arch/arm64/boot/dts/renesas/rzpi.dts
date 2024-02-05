@@ -673,6 +673,18 @@
 			};
 		};
 	};
+
+	rzsbc_mcu: rzsbc_mcu@45 {
+		compatible = "rzsbc_mcu";
+		reg = <0x45>;
+		status = "disabled";
+	};
+
+	rzsbc_ft5406: rzsbc_ft5406@38 {
+		compatible = "rzsbc_ft5406";
+		reg = <0x38>;
+		status = "disabled";
+	};
 };
 
 &mtu3 {
@@ -863,11 +875,8 @@
 	};
 
 	mipi_panel: panel@0 {
-		compatible = "ilitek,ph720128t003";
+		compatible = "rzsbc,tc358762";
 		reg = <0>;
-		power-gpios = <&pinctrl RZG2L_GPIO(4, 1) GPIO_ACTIVE_HIGH>;
-		switch-gpios = <&pinctrl RZG2L_GPIO(4, 0) GPIO_ACTIVE_HIGH>;
-		backlight = <&backlight>;
 		status = "disabled";
 
 		port {
