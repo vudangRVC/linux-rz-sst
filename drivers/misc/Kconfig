@@ -585,6 +585,13 @@ config NSM
 	  To compile this driver as a module, choose M here.
 	  The module will be called nsm.
 
+config RZSBC_MCU
+	tristate "rzsbc mcu"
+	default y
+	depends on I2C
+	help
+	  Control the power of touch screen for RZSBC board.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
