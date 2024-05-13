@@ -959,6 +959,12 @@ config SPI_RZV2M_CSI
 	  SPI driver for Renesas RZ/V2M Clocked Serial Interface (CSI).
 	  CSI supports both SPI host and SPI target roles.
 
+config SPI_RZ_RSCI
+	tristate "Renesas RSCI RZ/V2H controller"
+	depends on ARCH_RZV2H || COMPILE_TEST
+	help
+	 SPI driver for Renesas RSCI RZ/V2H and similar SoCs.
+
 config SPI_QCOM_QSPI
 	tristate "QTI QSPI controller"
 	depends on ARCH_QCOM || COMPILE_TEST
