@@ -1,0 +1,24 @@
+// SPDX-License-Identifier: GPL-2.0+
+/*
+ * Copyright (C) 2023 Renesas Electronics Corporation
+ */
+
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/pinctrl/rzg2l-pinctrl.h>
+
+/* 40-pin extended GPIO, expanded into UART, SPI, I2C, PWM and other interfaces */
+&pinctrl {
+	i2c3_pins: i2c3 {
+		pinmux = <RZG2L_PORT_PINMUX(46, 2, 4)>, /* SDA */
+			 <RZG2L_PORT_PINMUX(46, 3, 4)>; /* SCL */
+	};
+};
+
+&i2c3 {
+	pinctrl-0 = <&i2c3_pins>;
+	pinctrl-names = "default";
+	clock-frequency = <400000>;
+	status = "okay";
+};
