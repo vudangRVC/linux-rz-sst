@@ -1610,6 +1610,13 @@ static int da7219_hw_params(struct snd_pcm_substream *substream,
 		}
 	}
 
+    /* Enable preconfigured system modes by default */
+	regmap_write(da7219->regmap, DA7219_SYSTEM_MODES_OUTPUT, 0xF1);
+	regmap_write(da7219->regmap, DA7219_SYSTEM_MODES_INPUT, 0x55);
+
+	/* Enabled DAI */
+	regmap_write(da7219->regmap, DA7219_DAI_CTRL, 0x80);
+
 	/*
 	 * If we're master, then we have a limited set of BCLK rates we
 	 * support. For slave mode this isn't the case and the codec can detect
@@ -2444,6 +2451,42 @@ static struct reg_sequence da7219_rev_aa_patch[] = {
 	{ DA7219_REFERENCES, 0x08 },
 };
 
+static struct reg_sequence da7219_mic_enable_patch[] = {
+	{ DA7219_PLL_CTRL, 0x08 },
+	{ DA7219_DAI_TDM_CTRL, 0x40 },
+	{ DA7219_MIXIN_L_GAIN, 0x0B },
+	{ DA7219_ADC_L_GAIN, 0x5F },
+	{ DA7219_MIC_1_GAIN, 0x02 },
+	{ DA7219_MICBIAS_CTRL, 0x0B },
+	{ DA7219_ADC_L_CTRL, 0x80 },
+	{ DA7219_IO_CTRL, 0x01 },
+	{ DA7219_PC_COUNT, 0x02 },
+	{ DA7219_CP_VOL_THRESHOLD1, 0x0E },
+	{ DA7219_ALC_TARGET_MIN, 0x3F },
+	{ DA7219_ALC_GAIN_LIMITS, 0xFF },
+	{ DA7219_TONE_GEN_CFG2, 0x00 },
+	{ DA7219_TONE_GEN_CYCLES, 0x00 },
+	{ DA7219_TONE_GEN_FREQ1_L, 0x55 },
+	{ DA7219_TONE_GEN_FREQ1_U, 0x15 },
+	{ DA7219_ACCDET_IRQ_MASK_B, 0xFF },
+	{ DA7219_ACCDET_CONFIG_1, 0xD7 },
+	{ DA7219_ACCDET_CONFIG_2, 0x00 },
+};
+
+static int da7219_input_path_init(struct snd_soc_component *component)
+{
+	struct da7219_priv *da7219 = snd_soc_component_get_drvdata(component);
+	int ret;
+
+	ret = regmap_register_patch(da7219->regmap, da7219_mic_enable_patch,
+					    ARRAY_SIZE(da7219_mic_enable_patch));
+
+	if (ret)
+		dev_err(component->dev, "Failed to register mic enable patch: %d\n", ret);
+
+	return ret;
+}
+
 static int da7219_probe(struct snd_soc_component *component)
 {
 	struct da7219_priv *da7219 = snd_soc_component_get_drvdata(component);
@@ -2570,6 +2613,11 @@ static int da7219_probe(struct snd_soc_component *component)
 
 	/* Initialise AAD block */
 	ret = da7219_aad_init(component);
+	if (ret)
+		goto err_free_dai_clks;
+
+	/* Enable Mic */
+	ret = da7219_input_path_init(component);
 	if (ret)
 		goto err_free_dai_clks;
 
