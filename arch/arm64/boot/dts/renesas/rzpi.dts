@@ -1,0 +1,546 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/*
+ * Device Tree Source for the RZ/G2L SBC board
+ *
+ * Copyright (C) 2023 Renesas Electronics Corp.
+ */
+
+/dts-v1/;
+#include "r9a07g044l2.dtsi"
+#include "rzg2l-smarc-som.dtsi"
+#include "rzg2l-smarc-pinfunction.dtsi"
+
+/ {
+	compatible = "rzpi", "renesas,r9a07g044l2", "renesas,r9a07g044";
+	model = "NovTech RZpi board";
+
+	aliases {
+		i2c3 = "/soc/i2c@10058c00";
+		ethernet0 = "/soc/ethernet@11c20000";
+		ethernet1 = "/soc/ethernet@11c30000";
+		serial0 = "/soc/serial@1004b800";
+		i2c0 = "/soc/i2c@10058000";
+		i2c1 = "/soc/i2c@10058400";
+		mmc0 = "/soc/mmc@11c00000";
+		mmc1 = "/soc/mmc@11c10000";
+	};
+
+	chosen {
+		bootargs = "ignore_loglevel rw root=/dev/nfs ip=on";
+		stdout-path = "serial0:115200n8";
+	};
+
+	memory@48000000 {
+		device_type = "memory";
+		reg = <0x0 0x48000000 0x0 0x20000000>;
+	};
+
+	reserved-memory {
+		#address-cells = <0x2>;
+		#size-cells = <0x2>;
+		ranges;
+
+		global_cma: linux,cma@58000000 {
+			compatible = "shared-dma-pool";
+			linux,cma-default;
+			reusable;
+			reg = <0x0 0x58000000 0x0 0x2000000>;
+		};
+
+		mmp_reserved: linux,multimedia {
+			compatible = "shared-dma-pool";
+			reusable;
+			reg = <0x0 0x5a000000 0x0 0x1000000>;
+		};
+	};
+
+	mmngr {
+		compatible = "renesas,mmngr";
+		memory-region = <&mmp_reserved>;
+	};
+
+	mmngrbuf {
+		compatible = "renesas,mmngrbuf";
+	};
+
+	vspm_if {
+		compatible = "renesas,vspm_if";
+	};
+
+	audio_rzg2l: audio_mclock {
+		compatible = "fixed-clock";
+		#clock-cells = <0x0>;
+		clock-frequency = <0xac4400>;
+	};
+
+	snd_rzg2l: sound {
+		compatible = "simple-audio-card";
+		simple-audio-card,format = "i2s";
+		simple-audio-card,bitclock-master = <&cpu_dai>;
+		simple-audio-card,frame-master = <&cpu_dai>;
+		simple-audio-card,mclk-fs = <0x100>;
+		simple-audio-card,widgets = "Microphone", "Microphone Jack";
+		simple-audio-card,routing = "L2", "Mic Bias", "R2", "Mic Bias", \
+						"Mic Bias", "Microphone Jack";
+
+		cpu_dai: simple-audio-card,cpu {
+		};
+
+		simple-audio-card,codec {
+			clocks = <&audio_rzg2l>;
+			sound-dai = <&wm8978>;
+		};
+	};
+
+	regulator-usb0-vbus-otg {
+		compatible = "regulator-fixed";
+		regulator-name = "USB0_VBUS_OTG";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+	};
+
+	vccq_sdhi1: regulator-vccq-sdhi1 {
+		compatible = "regulator-gpio";
+		regulator-name = "SDHI1 VccQ";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <3300000>;
+		gpios-states = <1>;
+		states = <3300000 1>, <1800000 0>;
+	};
+
+	hdmi-out {
+		compatible = "hdmi-connector";
+		type = "a";
+
+		status = "okay";
+
+		port {
+			hdmi_con_out: endpoint {
+				remote-endpoint = <&sii9022_out>;
+			};
+		};
+	};
+
+	clk_ext_camera: clk_ext_camera {
+		compatible = "fixed-clock";
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
+	};
+
+	ov5645_vdddo_1v8: 1p8v {
+		compatible = "regulator-fixed";
+		regulator-name = "camera_vdddo";
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-always-on;
+	};
+
+	ov5645_vdda_2v8: 2p8v {
+		compatible = "regulator-fixed";
+		regulator-name = "camera_vdda";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		regulator-always-on;
+	};
+
+	ov5645_vddd_1v5: 1p5v {
+		compatible = "regulator-fixed";
+		regulator-name = "camera_vddd";
+		regulator-min-microvolt = <1500000>;
+		regulator-max-microvolt = <1500000>;
+		regulator-always-on;
+	};
+
+	sound_card {
+		compatible = "audio-graph-card";
+		dais = <&i2s2_port0>;
+	};
+};
+
+&pinctrl {
+	du_pins: du {
+		pinmux = <RZG2L_PORT_PINMUX(6, 0, 1)>, /* CLK */
+			<RZG2L_PORT_PINMUX(6, 1, 1)>, /* HSYNC */
+			<RZG2L_PORT_PINMUX(7, 0, 1)>, /* VSYNC */
+			<RZG2L_PORT_PINMUX(7, 1, 1)>, /* DE */
+			<RZG2L_PORT_PINMUX(8, 1, 1)>,
+			<RZG2L_PORT_PINMUX(8, 2, 1)>,
+			<RZG2L_PORT_PINMUX(9, 0, 1)>,
+			<RZG2L_PORT_PINMUX(9, 1, 1)>,
+			<RZG2L_PORT_PINMUX(10, 0, 1)>,
+			<RZG2L_PORT_PINMUX(10, 1, 1)>,
+			<RZG2L_PORT_PINMUX(12, 0, 1)>,
+			<RZG2L_PORT_PINMUX(12, 1, 1)>,
+			<RZG2L_PORT_PINMUX(13, 0, 1)>,
+			<RZG2L_PORT_PINMUX(13, 1, 1)>,
+			<RZG2L_PORT_PINMUX(13, 2, 1)>,
+			<RZG2L_PORT_PINMUX(14, 0, 1)>,
+			<RZG2L_PORT_PINMUX(15, 1, 1)>,
+			<RZG2L_PORT_PINMUX(16, 0, 1)>,
+			<RZG2L_PORT_PINMUX(16, 1, 1)>,
+			<RZG2L_PORT_PINMUX(17, 0, 1)>,
+			<RZG2L_PORT_PINMUX(17, 1, 1)>,
+			<RZG2L_PORT_PINMUX(17, 2, 1)>;
+	};
+
+	eth1_pins: eth1 {
+		pinmux = <RZG2L_PORT_PINMUX(29, 0, 1)>, /* ET1_TXC */
+			<RZG2L_PORT_PINMUX(29, 1, 1)>, /* ET1_TX_CTL */
+			<RZG2L_PORT_PINMUX(30, 0, 1)>, /* ET1_TXD0 */
+			<RZG2L_PORT_PINMUX(30, 1, 1)>, /* ET1_TXD1 */
+			<RZG2L_PORT_PINMUX(31, 0, 1)>, /* ET1_TXD2 */
+			<RZG2L_PORT_PINMUX(31, 1, 1)>, /* ET1_TXD3 */
+			<RZG2L_PORT_PINMUX(33, 1, 1)>, /* ET1_RXC */
+			<RZG2L_PORT_PINMUX(34, 0, 1)>, /* ET1_RX_CTL */
+			<RZG2L_PORT_PINMUX(34, 1, 1)>, /* ET1_RXD0 */
+			<RZG2L_PORT_PINMUX(35, 0, 1)>, /* ET1_RXD1 */
+			<RZG2L_PORT_PINMUX(35, 1, 1)>, /* ET1_RXD2 */
+			<RZG2L_PORT_PINMUX(36, 0, 1)>; /* ET1_RXD3 */
+	};
+
+	scif2_pins: scif2 {
+		pinmux = <RZG2L_PORT_PINMUX(48, 0, 1)>, /* TxD */
+			<RZG2L_PORT_PINMUX(48, 1, 1)>, /* RxD */
+			<RZG2L_PORT_PINMUX(42, 3, 4)>, /* CTS# */
+			<RZG2L_PORT_PINMUX(42, 4, 4)>; /* RTS# */
+	};
+
+	/* Remove unused nodes */
+	/delete-node/ can1-stb-hog;
+};
+
+&adc {
+	status = "disabled";
+};
+
+&audio_clk1 {
+	clock-frequency = <11289600>;
+};
+
+&audio_clk2 {
+	clock-frequency = <12288000>;
+};
+
+&canfd {
+	pinctrl-0 = <&can0_pins &can1_pins>;
+	pinctrl-names = "default";
+	status = "disabled";
+	channel0 {
+		status = "okay";
+	};
+	channel1 {
+		status = "okay";
+	};
+};
+
+&cru {
+	status = "okay";
+};
+
+&cpu_dai {
+	sound-dai = <&ssi0>;
+};
+
+&csi2 {
+	status = "okay";
+
+	ports {
+
+		port {
+			csi2_in: endpoint {
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+				remote-endpoint = <&ov5645_to_csi>;
+			};
+		};
+	};
+};
+
+&du {
+	pinctrl-0 = <&du_pins>;
+	pinctrl-names = "default";
+
+	status = "okay";
+
+	ports {
+
+		port@0 {
+			du_out_rgb: endpoint {
+				remote-endpoint = <&sii9022_in>;
+			};
+		};
+	};
+};
+
+&dsi0 {
+	status = "disabled";
+
+	ports {
+		port@1 {
+			dsi0_out: endpoint {
+				remote-endpoint = <&adv7535_in>;
+				data-lanes = <1 2 3 4>;
+			};
+		};
+	};
+};
+
+&ehci0 {
+	dr_mode = "otg";
+	status = "okay";
+};
+
+&ehci1 {
+	status = "okay";
+};
+
+&eth0 {
+	pinctrl-0 = <&eth0_pins>;
+	pinctrl-names = "default";
+	phy-handle = <&phy4>;
+	phy-mode = "rgmii-id";
+	status = "okay";
+
+	phy4: ethernet-phy@4 {
+		reg = <0x4>;
+	};
+
+	phy11: ethernet-phy@1 {
+		reg = <0x1>;
+	};
+};
+
+&eth1 {
+	pinctrl-0 = <&eth1_pins>;
+	pinctrl-names = "default";
+	phy-handle = <&phy11>;
+	phy-mode = "rgmii-id";
+	status = "okay";
+};
+
+&hsusb {
+	status = "disabled";
+};
+
+&i2c0 {
+	pinctrl-0 = <&i2c0_pins>;
+	pinctrl-names = "default";
+
+	status = "okay";
+
+	ov5645: camera@3c {
+		compatible = "ovti,ov5645";
+		reg = <0x3c>;
+		clock-names = "xclk";
+		clocks = <&clk_ext_camera>;
+		clock-frequency = <24000000>;
+		vdddo-supply = <&ov5645_vdddo_1v8>;
+		vdda-supply = <&ov5645_vdda_2v8>;
+		vddd-supply = <&ov5645_vddd_1v5>;
+
+		port {
+			ov5645_to_csi: endpoint {
+				clock-lanes = <0>;
+				data-lanes = <1 2>;
+				remote-endpoint = <&csi2_in>;
+			};
+		};
+	};
+};
+
+&i2c1 {
+	pinctrl-0 = <&i2c1_pins>;
+	pinctrl-names = "default";
+
+	status = "okay";
+
+	adv7535: hdmi@3d {
+		compatible = "adi,adv7535";
+		reg = <0x3d>;
+		status = "disabled";
+
+		avdd-supply = <&reg_1p8v>;
+		dvdd-supply = <&reg_1p8v>;
+		pvdd-supply = <&reg_1p8v>;
+		a2vdd-supply = <&reg_1p8v>;
+		v3p3-supply = <&reg_3p3v>;
+		v1p2-supply = <&reg_1p8v>;
+
+		adi,dsi-lanes = <4>;
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+				adv7535_in: endpoint@0 {
+					remote-endpoint = <&dsi0_out>;
+				};
+			};
+
+			port@2 {
+				reg = <2>;
+				codec_endpoint: endpoint {
+					remote-endpoint = <&i2s2_cpu_endpoint>;
+				};
+			};
+		};
+	};
+
+	sii9022: hdmi@39 {
+		#sound-dai-cells = <0x0>;
+		compatible = "sil,sii9022";
+		reg = <0x39>;
+		status = "okay";
+
+		ports {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			port@0 {
+				reg = <0>;
+
+				sii9022_in: endpoint {
+					remote-endpoint = <&du_out_rgb>;
+				};
+			};
+
+			port@1 {
+				reg = <1>;
+
+				sii9022_out: endpoint {
+					remote-endpoint = <&hdmi_con_out>;
+				};
+			};
+		};
+	};
+};
+
+&i2c3 {
+	pinctrl-0 = <&i2c3_pins>;
+	pinctrl-names = "default";
+	clock-frequency = <400000>;
+
+	status = "okay";
+
+	wm8978: codec@1a {
+				compatible = "wlf,wm8978";
+				#sound-dai-cells = <0>;
+				reg = <0x1a>;
+	};
+};
+
+&mtu3 {
+	status = "okay";
+};
+
+&ohci0 {
+	dr_mode = "otg";
+	status = "okay";
+};
+
+&ohci1 {
+	status = "okay";
+};
+
+&phyrst {
+	status = "okay";
+};
+
+&scif0 {
+	pinctrl-0 = <&scif0_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+};
+
+&scif2 {
+	pinctrl-0 = <&scif2_pins>;
+	pinctrl-names = "default";
+
+	uart-has-rtscts;
+	status = "okay";
+
+	bluetooth {
+		compatible = "brcm,bcm43438-bt";
+		device-wakeup-gpios = <&pinctrl RZG2L_GPIO(37, 0) GPIO_ACTIVE_LOW>;
+		host-wakeup-gpios = <&pinctrl RZG2L_GPIO(37, 1) GPIO_ACTIVE_LOW>;
+		status = "okay";
+	};
+};
+
+&sdhi1 {
+	pinctrl-0 = <&sdhi1_pins>;
+	pinctrl-1 = <&sdhi1_pins_uhs>;
+	pinctrl-names = "default", "state_uhs";
+
+	vmmc-supply = <&reg_3p3v>;
+	vqmmc-supply = <&vccq_sdhi1>;
+	bus-width = <4>;
+	sd-uhs-sdr50;
+	sd-uhs-sdr104;
+	status = "okay";
+	#address-cells = <0x1>;
+	#size-cells = <0x0>;
+	no-1-8-v;
+	no-mmc;
+	non-removable;
+	keep-power-in-suspend;
+
+	wifi@1 {
+		reg = <0x1>;
+		compatible = "brcm,bcm4329-fmac";
+	};
+};
+
+&spi1 {
+	pinctrl-0 = <&spi1_pins>;
+	pinctrl-names = "default";
+	dmas = <&dmac 0x2e99>, <&dmac 0x2e9a>;
+	dma-names = "tx", "rx";
+
+	status = "okay";
+};
+
+&ssi0 {
+	pinctrl-0 = <&ssi0_pins>;
+	pinctrl-names = "default";
+
+	status = "okay";
+};
+
+&ssi1 {
+	pinctrl-0 = <&ssi1_pins>;
+	pinctrl-names = "default";
+
+	status = "okay";
+
+	ports {
+		i2s2_port0: port@0 {
+			i2s2_cpu_endpoint: endpoint {
+				remote-endpoint = <&codec_endpoint>;
+				dai-format = "i2s";
+			};
+		};
+	};
+};
+
+&usb2_phy0 {
+	status = "okay";
+};
+
+&usb2_phy1 {
+	pinctrl-0 = <&usb1_pins>;
+	pinctrl-names = "default";
+
+	status = "okay";
+};
+
+&vccq_sdhi1 {
+	gpios = <&pinctrl RZG2L_GPIO(39, 1) GPIO_ACTIVE_HIGH>;
+};
+
+&ov5645 {
+	enable-gpios = <&pinctrl RZG2L_GPIO(2, 0) GPIO_ACTIVE_HIGH>;
+	reset-gpios = <&pinctrl RZG2L_GPIO(40, 2) GPIO_ACTIVE_LOW>;
+};
