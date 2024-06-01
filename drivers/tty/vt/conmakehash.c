@@ -109,8 +109,11 @@ int main(int argc, char *argv[])
       while (*rel_tblname == '/')
 	++rel_tblname;
     }
-  else
-    rel_tblname = tblname;
+  else {
+    // abs_srctree was null or invalid, let's use the relative version
+    // of the tbl file passed as arg2
+    rel_tblname = argv[2];
+  }
 
   /* For now we assume the default font is always 256 characters. */
   fontlen = 256;
@@ -209,7 +212,7 @@ int main(int argc, char *argv[])
 "%s: Corresponding to a range of font positions, there should be a Unicode range\n",
 			  tblname);
 		  exit(EX_DATAERR);
-	        }
+                }
 	      p++;
 	      un1 = getunicode(&p);
 	      if (un0 < 0 || un1 < 0)
@@ -218,14 +221,14 @@ int main(int argc, char *argv[])
 "%s: Bad Unicode range corresponding to font position range 0x%x-0x%x\n",
 			  tblname, fp0, fp1);
 		  exit(EX_DATAERR);
-	        }
+                }
 	      if (un1 - un0 != fp1 - fp0)
 		{
 		  fprintf(stderr,
 "%s: Unicode range U+%x-U+%x not of the same length as font position range 0x%x-0x%x\n",
 			  tblname, un0, un1, fp0, fp1);
 		  exit(EX_DATAERR);
-	        }
+                }
 	      for(i=fp0; i<=fp1; i++)
 		addpair(i,un0-fp0+i);
 	    }
