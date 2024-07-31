@@ -28,6 +28,10 @@
 #define SYS_LSI_PRR			0x308
 #define SYS_LSI_PRR_CA55_DIS		BIT(8)
 #define SYS_LSI_PRR_NPU_DIS		BIT(1)
+#define SYS_ADC_CFG_PWE_B		0x1600
+#define SYS_ADC_MSTP_ADA_B		BIT(0)
+#define SYS_MAX_REG			0x170C
+#define SYS_START_REG			0x300
 
 static void rzg3e_sys_print_id(struct device *dev,
 				void __iomem *sysc_base,
@@ -53,6 +57,15 @@ static void rzg3e_sys_print_id(struct device *dev,
 		dev_warn(dev, "CA55 PLL is not set to 1.7GHz\n");
 }
 
+static const struct rz_sysc_signal_init_data rzg3e_sysc_signals_init_data[] __initconst = {
+	{
+		.name = "ADC_MSTP_ADA_B",
+		.offset = SYS_ADC_CFG_PWE_B,
+		.mask = SYS_ADC_MSTP_ADA_B,
+		.refcnt_incr_val = 0
+	}
+};
+
 static const struct rz_sysc_soc_id_init_data rzg3e_sys_soc_id_init_data __initconst = {
 	.family = "RZ/G3E",
 	.id = 0x8679447,
@@ -64,5 +77,8 @@ static const struct rz_sysc_soc_id_init_data rzg3e_sys_soc_id_init_data __initco
 
 const struct rz_sysc_init_data rzg3e_sys_init_data = {
 	.soc_id_init_data = &rzg3e_sys_soc_id_init_data,
-	.max_register = 0x170c,
+	.signals_init_data = rzg3e_sysc_signals_init_data,
+	.num_signals = ARRAY_SIZE(rzg3e_sysc_signals_init_data),
+	.max_register = SYS_MAX_REG,
+	.start_register = SYS_START_REG,
 };
