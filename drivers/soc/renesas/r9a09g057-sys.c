@@ -57,6 +57,12 @@
 #define SYS_PCIE_MODE_CH1		0x1054
 #define SYS_PCIE_MODE			0x1060
 #define SYS_ADC_CFG			0x1600
+#define SYS_LSI_PRR_CA55_DIS		BIT(8)
+#define SYS_LSI_PRR_NPU_DIS		BIT(1)
+#define SYS_ADC_CFG_PWE_B		0x1600
+#define SYS_ADC_MSTP_ADA_B		BIT(0)
+#define SYS_MAX_REG			0x170C
+#define SYS_START_REG			0x300
 
 static void rzv2h_sys_print_id(struct device *dev,
 				void __iomem *sysc_base,
@@ -81,6 +87,15 @@ static void rzv2h_sys_print_id(struct device *dev,
 	if (FIELD_GET(SYS_LSI_MODE_STAT_BOOTPLLCA55, mode_val) != SYS_LSI_MODE_CA55_1_7GHZ)
 		dev_warn(dev, "CA55 PLL is not set to 1.7GHz\n");
 }
+
+static const struct rz_sysc_signal_init_data rzv2h_sysc_signals_init_data[] __initconst = {
+	{
+		.name = "ADC_MSTP_ADA_B",
+		.offset = SYS_ADC_CFG_PWE_B,
+		.mask = SYS_ADC_MSTP_ADA_B,
+		.refcnt_incr_val = 0
+	}
+};
 
 static const struct rz_sysc_soc_id_init_data rzv2h_sys_soc_id_init_data __initconst = {
 	.family = "RZ/V2H",
@@ -165,5 +180,8 @@ const struct rz_sysc_init_data rzv2h_sys_init_data = {
 	.soc_id_init_data = &rzv2h_sys_soc_id_init_data,
 	.readable_reg = rzv2h_regmap_readable_reg,
 	.writeable_reg = rzv2h_regmap_writeable_reg,
-	.max_register = 0x170c,
+	.signals_init_data = rzv2h_sysc_signals_init_data,
+	.num_signals = ARRAY_SIZE(rzv2h_sysc_signals_init_data),
+	.max_register = SYS_MAX_REG,
+	.start_register = SYS_START_REG,
 };
