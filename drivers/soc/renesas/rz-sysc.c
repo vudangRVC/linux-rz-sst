@@ -6,12 +6,16 @@
  */
 
 #include <linux/cleanup.h>
+#include <linux/dcache.h>
+#include <linux/debugfs.h>
 #include <linux/io.h>
 #include <linux/mfd/syscon.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#include <linux/refcount.h>
+#include <linux/seq_file.h>
 #include <linux/sys_soc.h>
 
 #include "rz-sysc.h"
@@ -22,11 +26,201 @@
  * struct rz_sysc - RZ SYSC private data structure
  * @base: SYSC base address
  * @dev: SYSC device pointer
+ * @signals: SYSC signals
+ * @num_signals: number of SYSC signals
  */
 struct rz_sysc {
 	void __iomem *base;
 	struct device *dev;
+	struct rz_sysc_signal *signals;
+	u8 num_signals;
+	unsigned int max_offset;
+	unsigned int start_offset;
 };
+
+static int rz_sysc_reg_read(void *context, unsigned int off, unsigned int *val)
+{
+	struct rz_sysc *sysc = context;
+
+	*val = readl(sysc->base + off);
+
+	return 0;
+}
+
+static struct rz_sysc_signal *rz_sysc_off_to_signal(struct rz_sysc *sysc, unsigned int offset,
+						    unsigned int mask)
+{
+	struct rz_sysc_signal *signals = sysc->signals;
+
+	for (u32 i = 0; i < sysc->num_signals; i++) {
+		if (signals[i].init_data->offset != offset)
+			continue;
+
+		/*
+		 * In case mask == 0 we just return the signal data w/o checking the mask.
+		 * This is useful when calling through rz_sysc_reg_write() to check
+		 * if the requested setting is for a mapped signal or not.
+		 */
+		if (mask) {
+			if (signals[i].init_data->mask == mask)
+				return &signals[i];
+		} else {
+			return &signals[i];
+		}
+	}
+
+	return NULL;
+}
+
+static int rz_sysc_reg_update_bits(void *context, unsigned int off,
+				   unsigned int mask, unsigned int val)
+{
+	struct rz_sysc *sysc = context;
+	struct rz_sysc_signal *signal;
+	bool update = false;
+
+	signal = rz_sysc_off_to_signal(sysc, off, mask);
+	if (signal) {
+		if (signal->init_data->refcnt_incr_val == val) {
+			if (!refcount_read(&signal->refcnt)) {
+				refcount_set(&signal->refcnt, 1);
+				update = true;
+			} else {
+				refcount_inc(&signal->refcnt);
+			}
+		} else {
+			update = refcount_dec_and_test(&signal->refcnt);
+		}
+	} else {
+		update = true;
+	}
+
+	if (update) {
+		u32 tmp;
+
+		tmp = readl(sysc->base + off);
+		tmp &= ~mask;
+		tmp |= val & mask;
+		writel(tmp, sysc->base + off);
+	}
+
+	return 0;
+}
+
+static int rz_sysc_reg_write(void *context, unsigned int off, unsigned int val)
+{
+	struct rz_sysc *sysc = context;
+	struct rz_sysc_signal *signal;
+
+	/*
+	 * Force using regmap_update_bits() for signals to have reference counter
+	 * per individual signal in case there are multiple signals controlled
+	 * through the same register.
+	 */
+	signal = rz_sysc_off_to_signal(sysc, off, 0);
+	if (signal) {
+		dev_err(sysc->dev,
+			"regmap_write() not allowed on register controlling a signal. Use regmap_update_bits()!");
+		return -EOPNOTSUPP;
+	}
+
+	writel(val, sysc->base + off);
+
+	return 0;
+}
+
+static bool rz_sysc_writeable_reg(struct device *dev, unsigned int off)
+{
+	struct rz_sysc *sysc = dev_get_drvdata(dev);
+	struct rz_sysc_signal *signal;
+
+	if (off >= sysc->start_offset && off <= sysc->max_offset) {
+		/* Any register containing a signal is writeable. */
+		signal = rz_sysc_off_to_signal(sysc, off, 0);
+		return true;
+	} else {
+		dev_err(sysc->dev, "Invalid register offset 0x%x", off);
+		return false;
+	}
+}
+
+static bool rz_sysc_readable_reg(struct device *dev, unsigned int off)
+{
+	struct rz_sysc *sysc = dev_get_drvdata(dev);
+	struct rz_sysc_signal *signal;
+
+	if (off >= sysc->start_offset && off <= sysc->max_offset) {
+		/* Any register containing a signal is writeable. */
+		signal = rz_sysc_off_to_signal(sysc, off, 0);
+		return true;
+	} else {
+		dev_err(sysc->dev, "Invalid register offset 0x%x", off);
+		return false;
+	}
+}
+
+static int rz_sysc_signals_show(struct seq_file *s, void *what)
+{
+	struct rz_sysc *sysc = s->private;
+
+	seq_printf(s, "%-20s Enable count\n", "Signal");
+	seq_printf(s, "%-20s ------------\n", "--------------------");
+
+	for (u8 i = 0; i < sysc->num_signals; i++) {
+		seq_printf(s, "%-20s %d\n", sysc->signals[i].init_data->name,
+			   refcount_read(&sysc->signals[i].refcnt));
+	}
+
+	return 0;
+}
+DEFINE_SHOW_ATTRIBUTE(rz_sysc_signals);
+
+static void rz_sysc_debugfs_remove(void *data)
+{
+	debugfs_remove_recursive(data);
+}
+
+static int rz_sysc_signals_init(struct rz_sysc *sysc,
+				const struct rz_sysc_signal_init_data *init_data,
+				u32 num_signals)
+{
+	struct dentry *root;
+	int ret;
+
+	sysc->signals = devm_kcalloc(sysc->dev, num_signals, sizeof(*sysc->signals),
+				     GFP_KERNEL);
+	if (!sysc->signals)
+		return -ENOMEM;
+
+	for (u32 i = 0; i < num_signals; i++) {
+		struct rz_sysc_signal_init_data *id;
+
+		id = devm_kzalloc(sysc->dev, sizeof(*id), GFP_KERNEL);
+		if (!id)
+			return -ENOMEM;
+
+		id->name = devm_kstrdup(sysc->dev, init_data->name, GFP_KERNEL);
+		if (!id->name)
+			return -ENOMEM;
+
+		id->offset = init_data->offset;
+		id->mask = init_data->mask;
+		id->refcnt_incr_val = init_data->refcnt_incr_val;
+
+		sysc->signals[i].init_data = id;
+		refcount_set(&sysc->signals[i].refcnt, 0);
+	}
+
+	sysc->num_signals = num_signals;
+
+	root = debugfs_create_dir("renesas-rz-sysc", NULL);
+	ret = devm_add_action_or_reset(sysc->dev, rz_sysc_debugfs_remove, root);
+	if (ret)
+		return ret;
+	debugfs_create_file("signals", 0444, root, sysc, &rz_sysc_signals_fops);
+
+	return 0;
+}
 
 static int rz_sysc_soc_init(struct rz_sysc *sysc, const struct of_device_id *match)
 {
@@ -38,6 +232,10 @@ static int rz_sysc_soc_init(struct rz_sysc *sysc, const struct of_device_id *mat
 	struct soc_device *soc_dev;
 	char soc_id[32] = {0};
 	size_t size;
+
+	if (!soc_data || !soc_data->family || !soc_data->devid_offset ||
+	    !soc_data->revision_mask)
+		return -EINVAL;
 
 	soc_id_start = strchr(match->compatible, ',') + 1;
 	soc_id_end = strchr(match->compatible, '-');
@@ -85,6 +283,19 @@ static int rz_sysc_soc_init(struct rz_sysc *sysc, const struct of_device_id *mat
 	return 0;
 }
 
+static struct regmap_config rz_sysc_regmap = {
+	.name = "rz_sysc_regs",
+	.reg_bits = 32,
+	.reg_stride = 4,
+	.val_bits = 32,
+	.fast_io = true,
+	.reg_read = rz_sysc_reg_read,
+	.reg_write = rz_sysc_reg_write,
+	.reg_update_bits = rz_sysc_reg_update_bits,
+	.writeable_reg = rz_sysc_writeable_reg,
+	.readable_reg = rz_sysc_readable_reg,
+};
+
 static const struct of_device_id rz_sysc_match[] = {
 #ifdef CONFIG_SYSC_R9A08G045
 	{ .compatible = "renesas,r9a08g045-sysc", .data = &rzg3s_sysc_init_data },
@@ -111,15 +322,9 @@ static int rz_sysc_probe(struct platform_device *pdev)
 	struct rz_sysc *sysc;
 	int ret;
 
-	struct regmap_config *regmap_cfg __free(kfree) = kzalloc(sizeof(*regmap_cfg), GFP_KERNEL);
-	if (!regmap_cfg)
-		return -ENOMEM;
-
 	match = of_match_node(rz_sysc_match, dev->of_node);
-	if (!match)
+	if (!match || !match->data)
 		return -ENODEV;
-
-	data = match->data;
 
 	sysc = devm_kzalloc(dev, sizeof(*sysc), GFP_KERNEL);
 	if (!sysc)
@@ -134,16 +339,21 @@ static int rz_sysc_probe(struct platform_device *pdev)
 	if (ret)
 		return ret;
 
-	regmap_cfg->name = "rz_sysc_regs";
-	regmap_cfg->reg_bits = 32;
-	regmap_cfg->reg_stride = 4;
-	regmap_cfg->val_bits = 32;
-	regmap_cfg->fast_io = true;
-	regmap_cfg->max_register = data->max_register;
-	regmap_cfg->readable_reg = data->readable_reg;
-	regmap_cfg->writeable_reg = data->writeable_reg;
+	data = match->data;
+	sysc->max_offset =  data->max_register;
+	sysc->start_offset = data->start_register;
+	if (!data->max_register)
+		return -EINVAL;
 
-	regmap = devm_regmap_init_mmio(dev, sysc->base, regmap_cfg);
+	ret = rz_sysc_signals_init(sysc, data->signals_init_data, data->num_signals);
+	if (ret)
+		return ret;
+
+	dev_set_drvdata(dev, sysc);
+	rz_sysc_regmap.max_register = data->max_register;
+	rz_sysc_regmap.readable_reg = data->readable_reg;
+	rz_sysc_regmap.writeable_reg = data->writeable_reg;
+	regmap = devm_regmap_init(dev, NULL, sysc, &rz_sysc_regmap);
 	if (IS_ERR(regmap))
 		return PTR_ERR(regmap);
 
@@ -153,7 +363,6 @@ static int rz_sysc_probe(struct platform_device *pdev)
 static struct platform_driver rz_sysc_driver = {
 	.driver = {
 		.name = "renesas-rz-sysc",
-		.suppress_bind_attrs = true,
 		.of_match_table = rz_sysc_match
 	},
 	.probe = rz_sysc_probe

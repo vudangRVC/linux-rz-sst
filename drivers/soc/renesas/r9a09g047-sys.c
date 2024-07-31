@@ -48,7 +48,10 @@
 #define SYS_PCIE_ACK_CH0		0x101c
 #define SYS_PCIE_MISC_CH0		0x1020
 #define SYS_PCIE_MODE_CH0		0x1024
-#define SYS_ADC_CFG			0x1600
+#define SYS_ADC_CFG_PWE_B		0x1600
+#define SYS_ADC_MSTP_ADA_B		BIT(0)
+#define SYS_MAX_REG			0x170C
+#define SYS_START_REG			0x300
 
 static void rzg3e_sys_print_id(struct device *dev,
 				void __iomem *sysc_base,
@@ -73,6 +76,15 @@ static void rzg3e_sys_print_id(struct device *dev,
 	if (FIELD_GET(SYS_LSI_MODE_STAT_BOOTPLLCA55, mode_val) != SYS_LSI_MODE_CA55_1_7GHZ)
 		dev_warn(dev, "CA55 PLL is not set to 1.7GHz\n");
 }
+
+static const struct rz_sysc_signal_init_data rzg3e_sysc_signals_init_data[] __initconst = {
+	{
+		.name = "ADC_MSTP_ADA_B",
+		.offset = SYS_ADC_CFG_PWE_B,
+		.mask = SYS_ADC_MSTP_ADA_B,
+		.refcnt_incr_val = 0
+	}
+};
 
 static const struct rz_sysc_soc_id_init_data rzg3e_sys_soc_id_init_data __initconst = {
 	.family = "RZ/G3E",
@@ -105,7 +117,7 @@ static bool rzg3e_regmap_readable_reg(struct device *dev, unsigned int reg)
 	case SYS_PCIE_ACK_CH0:
 	case SYS_PCIE_MISC_CH0:
 	case SYS_PCIE_MODE_CH0:
-	case SYS_ADC_CFG:
+	case SYS_ADC_CFG_PWE_B:
 		return true;
 	default:
 		return false;
@@ -132,7 +144,7 @@ static bool rzg3e_regmap_writeable_reg(struct device *dev, unsigned int reg)
 	case SYS_PCIE_ACK_CH0:
 	case SYS_PCIE_MISC_CH0:
 	case SYS_PCIE_MODE_CH0:
-	case SYS_ADC_CFG:
+	case SYS_ADC_CFG_PWE_B:
 		return true;
 	default:
 		return false;
@@ -143,5 +155,8 @@ const struct rz_sysc_init_data rzg3e_sys_init_data = {
 	.soc_id_init_data = &rzg3e_sys_soc_id_init_data,
 	.readable_reg = rzg3e_regmap_readable_reg,
 	.writeable_reg = rzg3e_regmap_writeable_reg,
-	.max_register = 0x170c,
+	.signals_init_data = rzg3e_sysc_signals_init_data,
+	.num_signals = ARRAY_SIZE(rzg3e_sysc_signals_init_data),
+	.max_register = SYS_MAX_REG,
+	.start_register = SYS_START_REG,
 };
