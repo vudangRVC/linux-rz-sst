@@ -436,6 +436,11 @@ static const struct renesas_id id_rzv2m __initconst = {
 	.mask = 0xff,
 };
 
+static const struct renesas_id id_rzg3e __initconst = {
+	.offset = 0x304,
+	.mask = 0xfffffff,
+};
+
 static const struct renesas_id id_prr __initconst = {
 	.offset = 0,
 	.mask = 0xff00,
