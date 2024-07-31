@@ -322,11 +322,11 @@
 		};
 
 		sys: system-controller@10430000 {
-			compatible = "renesas,r9a09g057-sys";
+			compatible = "renesas,r9a09g057-sys", "syscon";
 			reg = <0 0x10430000 0 0x10000>;
 			clocks = <&cpg CPG_CORE R9A09G057_SYS_0_PCLK>;
 			resets = <&cpg 48>;
-			status = "disabled";
+			#renesas,sysc-signal-cells = <2>;
 		};
 
 		dmac0: dma-controller@11400000 {
@@ -1911,6 +1911,7 @@
 			clock-names = "pclk", "oscclk";
 			resets = <&cpg 0x75>;
 			power-domains = <&cpg>;
+			renesas,syscon-cpg-error-rst = <&cpg 0xb40 0>;
 			status = "disabled";
 		};
 
@@ -1922,6 +1923,7 @@
 			clock-names = "pclk", "oscclk";
 			resets = <&cpg 0x76>;
 			power-domains = <&cpg>;
+			renesas,syscon-cpg-error-rst = <&cpg 0xb40 1>;
 			status = "disabled";
 		};
 
@@ -1933,6 +1935,7 @@
 			clock-names = "pclk", "oscclk";
 			resets = <&cpg 0x77>;
 			power-domains = <&cpg>;
+			renesas,syscon-cpg-error-rst = <&cpg 0xb40 2>;
 			status = "disabled";
 		};
 
@@ -1944,6 +1947,7 @@
 			clock-names = "pclk", "oscclk";
 			resets = <&cpg 0x78>;
 			power-domains = <&cpg>;
+			renesas,syscon-cpg-error-rst = <&cpg 0xb40 3>;
 			status = "disabled";
 		};
 
