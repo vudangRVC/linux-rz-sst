@@ -267,8 +267,7 @@ void rzsbc_ft5406_start_polling(void)
 }
 EXPORT_SYMBOL_GPL(rzsbc_ft5406_start_polling);
 
-static int rzsbc_ft5406_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int rzsbc_ft5406_probe(struct i2c_client *client)
 {
 	struct input_dev *input_dev;
 	int ret = 0, timeout = 10;
@@ -356,7 +355,7 @@ timeout_failed:
 	return ret;
 }
 
-static int rzsbc_ft5406_remove(struct i2c_client *client)
+static void rzsbc_ft5406_remove(struct i2c_client *client)
 {
 	cancel_work_sync(&g_ts_data->ft5406_work);
 	if (g_ts_data->input_dev) {
@@ -366,7 +365,7 @@ static int rzsbc_ft5406_remove(struct i2c_client *client)
 	kfree(g_ts_data);
 	g_ts_data = NULL;
 	g_mcu_ready = 0;
-	return 0;
+	return;
 }
 
 static const struct i2c_device_id rzsbc_ft5406_id[] = {

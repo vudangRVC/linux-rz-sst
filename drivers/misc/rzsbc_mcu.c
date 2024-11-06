@@ -222,9 +222,9 @@ int rzsbc_mcu_bl_update_status(struct backlight_device *bd)
 	if (bd->props.state & BL_CORE_SUSPENDED)
 		brightness = 0;
 
-	LOG_INFO("%s  brightness=%d power=%d fb_blank=%d state =%d bd->props.brightness=%d\n",
+	LOG_INFO("%s  brightness=%d power=%d state =%d bd->props.brightness=%d\n",
 					__func__, brightness, bd->props.power,
-					bd->props.fb_blank, bd->props.state,
+					bd->props.state,
 					bd->props.brightness);
 	return rzsbc_mcu_set_bright(brightness);
 }
@@ -274,8 +274,7 @@ int rzsbc_mcu_is_connected(void)
 }
 EXPORT_SYMBOL_GPL(rzsbc_mcu_is_connected);
 
-static int rzsbc_mcu_probe(struct i2c_client *client,
-			const struct i2c_device_id *id)
+static int rzsbc_mcu_probe(struct i2c_client *client)
 {
 	struct rzsbc_mcu_data *mcu_data;
 	int ret;
@@ -329,13 +328,13 @@ error:
 	return ret;
 }
 
-static int rzsbc_mcu_remove(struct i2c_client *client)
+static void rzsbc_mcu_remove(struct i2c_client *client)
 {
 	struct rzsbc_mcu_data *mcu_data = i2c_get_clientdata(client);
 
 	connected = 0;
 	kfree(mcu_data);
-	return 0;
+	return;
 }
 
 static const struct i2c_device_id rzsbc_mcu_id[] = {

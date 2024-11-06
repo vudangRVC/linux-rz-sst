@@ -34,6 +34,7 @@
 #include <drm/drm_crtc.h>
 #include <drm/drm_mipi_dsi.h>
 #include <drm/drm_panel.h>
+#include <drm/drm_edid.h>
 
 #include <video/display_timing.h>
 #include <video/of_display_timing.h>
@@ -602,7 +603,7 @@ int tc358762_dsi_probe(struct mipi_dsi_device *dsi)
 	return mipi_dsi_attach(dsi);
 }
 
-int tc358762_dsi_remove(struct mipi_dsi_device *dsi)
+void tc358762_dsi_remove(struct mipi_dsi_device *dsi)
 {
 	int err;
 
@@ -610,7 +611,9 @@ int tc358762_dsi_remove(struct mipi_dsi_device *dsi)
 	if (err < 0)
 		dev_err(&dsi->dev, "failed to detach from DSI host: %d\n", err);
 
-	return tc358762_remove(&dsi->dev);
+	err = tc358762_remove(&dsi->dev);
+	if (err < 0)
+		dev_err(&dsi->dev, "failed to remove device from DSI host: %d\n", err);
 }
 
 void tc358762_dsi_shutdown(struct mipi_dsi_device *dsi)
