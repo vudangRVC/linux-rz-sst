@@ -534,12 +534,6 @@
 	clock-frequency = <24000000>;
 };
 
-&gpu {
-	mali-supply = <&reg_1p1v>;
-
-	/delete-property/power-domains;
-};
-
 &ostm1 {
 	status = "okay";
 };
