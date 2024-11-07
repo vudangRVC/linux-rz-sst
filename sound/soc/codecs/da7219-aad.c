@@ -1017,7 +1017,7 @@ int da7219_aad_init(struct snd_soc_component *component)
 
 	ret = request_threaded_irq(da7219_aad->irq, NULL,
 				   da7219_aad_irq_thread,
-				   IRQF_TRIGGER_LOW | IRQF_ONESHOT,
+				   IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 				   "da7219-aad", da7219_aad);
 	if (ret) {
 		dev_err(component->dev, "Failed to request IRQ: %d\n", ret);
