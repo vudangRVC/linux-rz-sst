@@ -82,10 +82,14 @@ static int rzg2l_cru_group_notify_complete(struct v4l2_async_notifier *notifier)
 				    MEDIA_LNK_FL_ENABLED |
 				    MEDIA_LNK_FL_IMMUTABLE);
 	if (ret) {
+		cru->is_csi = false;
+
 		dev_err(cru->dev, "Error creating link from %s to %s\n",
 			source->name, sink->name);
 		return ret;
 	}
+
+	cru->is_csi = true;
 
 	return 0;
 }
