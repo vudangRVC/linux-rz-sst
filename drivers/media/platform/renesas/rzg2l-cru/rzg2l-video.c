@@ -99,6 +99,9 @@ struct rzg2l_cru_buffer {
 	struct list_head list;
 };
 
+static u32 amnmbxaddrl[RZG2L_CRU_HW_BUFFER_MAX];
+static u32 amnmbxaddrh[RZG2L_CRU_HW_BUFFER_MAX];
+
 #define to_buf_list(vb2_buffer) \
 	(&container_of(vb2_buffer, struct rzg2l_cru_buffer, vb)->list)
 
@@ -285,8 +288,17 @@ static void rzg2l_cru_initialize_axi(struct rzg2l_cru_dev *cru)
 	 */
 	rzg2l_cru_write(cru, AMnMBVALID, AMnMBVALID_MBVALID(cru->num_buf - 1));
 
-	for (slot = 0; slot < cru->num_buf; slot++)
-		rzg2l_cru_fill_hw_slot(cru, slot);
+	if (cru->retry_thread) {
+		for (slot = 0; slot < cru->num_buf; slot++) {
+			rzg2l_cru_write(cru, AMnMBxADDRL(slot),
+					amnmbxaddrl[slot]);
+			rzg2l_cru_write(cru, AMnMBxADDRH(slot),
+					amnmbxaddrh[slot]);
+		}
+	} else {
+		for (slot = 0; slot < cru->num_buf; slot++)
+			rzg2l_cru_fill_hw_slot(cru, slot);
+	}
 }
 
 static void rzg2l_cru_csi2_setup(struct rzg2l_cru_dev *cru, bool *input_is_yuv,
@@ -466,7 +478,7 @@ static int rzg2l_cru_set_stream(struct rzg2l_cru_dev *cru, int on)
 	struct media_pipeline *pipe;
 	struct v4l2_subdev *sd;
 	struct media_pad *pad;
-	int ret;
+	int ret, i;
 
 	pad = media_pad_remote_pad_first(&cru->pad);
 	if (!pad)
@@ -501,6 +513,11 @@ static int rzg2l_cru_set_stream(struct rzg2l_cru_dev *cru, int on)
 	if (ret)
 		return ret;
 
+	for (i = 0; i < cru->num_buf; i++) {
+		amnmbxaddrl[i] = rzg2l_cru_read(cru, AMnMBxADDRL(i));
+		amnmbxaddrh[i] = rzg2l_cru_read(cru, AMnMBxADDRH(i));
+	}
+
 	ret = v4l2_subdev_call(sd, video, pre_streamon, 0);
 	if (ret && ret != -ENOIOCTLCMD)
 		goto pipe_line_stop;
@@ -524,8 +541,78 @@ static void rzg2l_cru_stop_streaming(struct rzg2l_cru_dev *cru)
 {
 	cru->state = RZG2L_CRU_DMA_STOPPING;
 
+	if (cru->retry_thread)
+		kthread_stop(cru->retry_thread);
+
 	rzg2l_cru_set_stream(cru, 0);
 }
+
+static int retry_streaming_func(void *data)
+{
+	struct rzg2l_cru_dev *cru = (struct rzg2l_cru_dev *) data;
+	struct v4l2_subdev *sd;
+	struct media_pad *pad;
+	int ret;
+	int retry = 0;
+	int i;
+
+	pad = media_pad_remote_pad_first(&cru->pad);
+	if (!pad)
+		return -EPIPE;
+
+	sd = media_entity_to_v4l2_subdev(pad->entity);
+
+	while (retry < 5) {
+		for (i = 0; i < 10; i++) {
+			if (cru->state == RZG2L_CRU_DMA_RUNNING)
+				goto retry_done;
+
+			usleep_range(20000, 25000);
+		}
+
+		/* Stop CRU reception */
+		rzg2l_cru_write(cru, ICnEN, 0);
+		v4l2_subdev_call(sd, video, s_stream, 0);
+		rzg2l_cru_stop_image_processing(cru);
+		pm_runtime_put(cru->dev);
+		msleep(20);
+
+		cru->state = RZG2L_CRU_DMA_STARTING;
+
+		pm_runtime_get_sync(cru->dev);
+
+		/* Release reset state */
+		reset_control_deassert(cru->presetn);
+		reset_control_deassert(cru->aresetn);
+
+		msleep(20);
+
+		ret = rzg2l_cru_start_image_processing(cru);
+		if (ret)
+			goto retry_done;
+
+		ret = v4l2_subdev_call(sd, video, s_stream, 1);
+		if (ret == -ENOIOCTLCMD)
+			ret = 0;
+
+		if (ret)
+			goto retry_done;
+
+		retry++;
+
+		cru_info(cru, "CRU retry init: %d times\n", retry);
+	}
+
+	/* After 5 retries, log the error and quit */
+	cru_err(cru, "Please retry due to no input signal after %d retries\n", retry);
+	return -EIO;
+
+retry_done:
+	cru->retry_thread = NULL;
+
+	return 0;
+}
+
 
 static irqreturn_t rzg2l_cru_irq(int irq, void *data)
 {
@@ -664,6 +751,23 @@ static int rzg2l_cru_start_streaming_vq(struct vb2_queue *vq, unsigned int count
 
 	cru->state = RZG2L_CRU_DMA_STARTING;
 	dev_dbg(cru->dev, "Starting to capture\n");
+
+	/*
+	 * Workaround to start a thread to restart CRU processing flow
+	 * if there is no input to CRU while using MIPI CSI2.
+	 */
+	if (cru->is_csi) {
+		cru->retry_thread = kthread_create(retry_streaming_func, cru,
+				"CRU retry thread");
+		if (IS_ERR(cru->retry_thread)) {
+			ret = PTR_ERR(cru->retry_thread);
+			cru->retry_thread = NULL;
+			goto out;
+		}
+
+		wake_up_process(cru->retry_thread);
+	}
+
 	return 0;
 
 out:
