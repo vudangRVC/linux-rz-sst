@@ -131,7 +131,16 @@ struct rzg2l_cru_dev {
 	enum rzg2l_cru_dma_state state;
 
 	struct v4l2_pix_format format;
+
+	struct task_struct *retry_thread;
+	bool is_csi;
 };
+
+/* Debug */
+#define cru_dbg(d, fmt, arg...)		dev_dbg(d->dev, fmt, ##arg)
+#define cru_info(d, fmt, arg...)	dev_info(d->dev, fmt, ##arg)
+#define cru_warn(d, fmt, arg...)	dev_warn(d->dev, fmt, ##arg)
+#define cru_err(d, fmt, arg...)		dev_err(d->dev, fmt, ##arg)
 
 int rzg2l_cru_start_image_processing(struct rzg2l_cru_dev *cru);
 void rzg2l_cru_stop_image_processing(struct rzg2l_cru_dev *cru);
