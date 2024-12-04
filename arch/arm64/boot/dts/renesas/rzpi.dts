@@ -529,8 +529,6 @@
 
 &gpu {
 	mali-supply = <&reg_1p1v>;
-
-	/delete-property/power-domains;
 };
 
 &ostm1 {
