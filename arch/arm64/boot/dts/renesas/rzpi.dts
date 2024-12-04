@@ -169,32 +169,39 @@
 		status = "disabled";
 	};
 
-	audio_rzg2l: audio_mclock {
+	x1_clk: x1-clock {
 		compatible = "fixed-clock";
-		#clock-cells = <0x0>;
-		clock-frequency = <0xac4400>;
+		#clock-cells = <0>;
+		clock-frequency = <24000000>;
 	};
 
-	snd_rzg2l: sound {
+	sound {
 		compatible = "simple-audio-card";
+		simple-audio-card,name = "audio-da7219";
 		simple-audio-card,format = "i2s";
 		simple-audio-card,bitclock-master = <&cpu_dai>;
 		simple-audio-card,frame-master = <&cpu_dai>;
-		simple-audio-card,mclk-fs = <0x100>;
-		simple-audio-card,widgets = "Microphone", "Microphone Jack";
-		simple-audio-card,routing = "L2", "Mic Bias", "R2", "Mic Bias", \
-						"Mic Bias", "Microphone Jack";
+
+		simple-audio-card,widgets =
+				"Microphone", "Microphone Jack",
+				"Headphone", "Headphone Jack";
+		simple-audio-card,routing =
+				"MIC", "Microphone Jack",
+				"Mic PGA", "ADC",
+				"Mixin PGA", "ADC",
+				"Mixout Left PGA", "HPL",
+				"Mixout Right PGA", "HPR",
+				"Headphone Jack", "HPL",
+				"Headphone Jack", "HPR";
 
 		cpu_dai: simple-audio-card,cpu {
+			sound-dai = <&ssi1>;
 		};
 
-		simple-audio-card,codec {
-			clocks = <&audio_rzg2l>;
-			sound-dai = <&wm8978>;
+		codec_dai: simple-audio-card,codec {
+			clocks = <&versa3 0>;
+			sound-dai = <&da7219>;
 		};
-	};
-
-	sound_card {
 	};
 
 	clk_ext_camera: clk_ext_camera {
@@ -545,11 +552,26 @@
 
 	status = "okay";
 
-    wm8978: codec@1a {
-        compatible = "wlf,wm8978";
-        #sound-dai-cells = <0>;
-        reg = <0x1a>;
-    };
+	versa3: versa3@68 {
+		compatible = "renesas,5p35023";
+		reg = <0x68>;
+		status = "okay";
+
+		#clock-cells = <1>;
+		clocks = <&x1_clk>;
+		clock-names = "x1";
+
+		renesas,settings = [
+			80 00 00 19 00 42 cc 0b 04 32 00 1a 5f 12 90 7b
+			00 32 00 00 00 00 00 00 01 24 03 b0 33 38 90 84
+			e0 c0 74 c4 96
+		];
+
+		assigned-clocks = <&versa3 0>;
+		assigned-clock-rates =	<12288000>;
+		clock-divider-read-only = <1>;
+		clock-flags = <2176>;
+	};
 
 	da7219: codec@1a {
 		compatible = "dlg,da7219";
@@ -571,7 +593,7 @@
 			dlg,btn-cfg = <50>;
 			dlg,mic-det-thr = <500>;
 			dlg,jack-ins-deb = <20>;
-			dlg,jack-det-rate = "32ms_64ms";
+			dlg,jack-det-rate = "32_64";
 			dlg,jack-rem-deb = <1>;
 
 			dlg,a-d-btn-thr = <0xa>;
