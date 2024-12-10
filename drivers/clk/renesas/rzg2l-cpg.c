@@ -553,34 +553,13 @@ rzg2l_cpg_get_foutpostdiv_rate(struct rzg2l_pll5_param *params,
 			       unsigned long rate)
 {
 	unsigned long foutpostdiv_rate;
-	unsigned long hsclk;
 
-	/*
-	 * Relationship between hsclk and vclk must follow
-	 * vclk * bpp = hsclk * 8 * lanes
-	 * where vclk: video clock (Hz)
-	 *       bpp: video pixel bit depth
-	 *       hsclk: DSI HS Byte clock frequency (Hz)
-	 *       lanes: number of data lanes
-	 * Currently default value:
-	 *		 bpp is 24
-	 *		 lanes is 1
-	 *		 => hsclk = 3 * vclk
-	 * intin = (hsclk * 16 * refdiv * postdiv1 * postdiv2) / EXTAL_FREQ
-	 * fracin = ((hsclk * 16 * refdiv * postdiv1 * postdiv2) % EXTAL_FREQ) << 24) / EXTAL_FREQ
-	 */
-	hsclk = 3 * rate;
-
-	params->pl5_refdiv = 1;
+	params->pl5_intin = rate / MEGA;
+	params->pl5_fracin = div_u64(((u64)rate % MEGA) << 24, MEGA);
+	params->pl5_refdiv = 2;
 	params->pl5_postdiv1 = 1;
 	params->pl5_postdiv2 = 1;
 	params->pl5_spread = 0x16;
-	params->pl5_intin =
-		(hsclk * 16 * params->pl5_refdiv * params->pl5_postdiv1 * params->pl5_postdiv2) /
-		(EXTAL_FREQ_IN_MEGA_HZ * MEGA);
-	params->pl5_fracin =
-		(((hsclk * 16 * params->pl5_refdiv * params->pl5_postdiv1 * params->pl5_postdiv2) %
-		(EXTAL_FREQ_IN_MEGA_HZ * MEGA)) << 24) / (EXTAL_FREQ_IN_MEGA_HZ * MEGA);
 
 	foutpostdiv_rate =
 		EXTAL_FREQ_IN_MEGA_HZ * MEGA / params->pl5_refdiv *
@@ -960,16 +939,9 @@ rzg2l_cpg_sipll5_register(const struct cpg_core_clk *core,
 	if (ret)
 		return ERR_PTR(ret);
 
-	/* Find possible clock divide ratios.
-	 * From dsi_div = foutpostdiv / vclk, we need to calculate clock divide ratios
-	 * The equation is: dsi_div = (2 ^ dis_div_a) * (1 + dis_div_b)
-	 * With div_a fixed, we get: dis_div_b = (dsi_div / (2 ^ dis_div_a)) - 1
-	 *   div_a can be 0-4
-	 *   div_b can be 0-16 
-	*/
-	priv->mux_dsi_div_params.clksrc = 1; /* Use clk src 1 : 1.5GHz, 0: 3GHz for DSI */
-	priv->mux_dsi_div_params.dsi_div_a = 1; /* Divided by X^2 */
-	priv->mux_dsi_div_params.dsi_div_b = 11; /* Divided by Y+1 */
+	priv->mux_dsi_div_params.clksrc = 1; /* Use clk src 1 for DSI */
+	priv->mux_dsi_div_params.dsi_div_a = 1; /* Divided by 2 */
+	priv->mux_dsi_div_params.dsi_div_b = 2; /* Divided by 3 */
 
 	return clk_hw->clk;
 }
