@@ -25,6 +25,7 @@
 #include <drm/drm_probe_helper.h>
 
 #include "rzg2l_mipi_dsi_regs.h"
+#include "rzg2l_mipi_dsi.h"
 
 struct rzg2l_mipi_dsi {
 	struct device *dev;
@@ -285,8 +286,6 @@ static int rzg2l_mipi_dsi_startup(struct rzg2l_mipi_dsi *dsi,
 	ret = pm_runtime_resume_and_get(dsi->dev);
 	if (ret < 0)
 		return ret;
-
-	clk_set_rate(dsi->vclk, mode->clock * 1000);
 
 	ret = rzg2l_mipi_dsi_dphy_init(dsi, hsfreq);
 	if (ret < 0)
@@ -601,6 +600,22 @@ static const struct drm_bridge_funcs rzg2l_mipi_dsi_bridge_ops = {
 /* -----------------------------------------------------------------------------
  * Host setting
  */
+
+int rzg2l_mipi_dsi_get_data_lanes(struct platform_device *pdev)
+{
+	struct rzg2l_mipi_dsi *dsi = platform_get_drvdata(pdev);
+
+	return dsi->lanes;
+}
+EXPORT_SYMBOL_GPL(rzg2l_mipi_dsi_get_data_lanes);
+
+int rzg2l_mipi_dsi_get_bpp(struct platform_device *pdev)
+{
+	struct rzg2l_mipi_dsi *dsi = platform_get_drvdata(pdev);
+
+	return mipi_dsi_pixel_format_to_bpp(dsi->format);
+}
+EXPORT_SYMBOL_GPL(rzg2l_mipi_dsi_get_bpp);
 
 static int rzg2l_mipi_dsi_host_attach(struct mipi_dsi_host *host,
 				      struct mipi_dsi_device *device)
