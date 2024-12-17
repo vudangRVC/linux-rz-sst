@@ -643,6 +643,21 @@ config MCHP_LAN966X_PCI
 	    - lan966x-serdes (PHY_LAN966X_SERDES)
 	    - lan966x-miim (MDIO_MSCC_MIIM)
 	    - lan966x-switch (LAN966X_SWITCH)
+config RZSBC_MCU
+    tristate "Support for RZSBC MCU"
+    default y
+    depends on I2C
+    help
+      Enable support for the RZSBC MCU (Microcontroller Unit) responsible for
+      controlling the touchscreen power on the RZSBC platform. This driver
+      manages the power state of the touchscreen, enabling and disabling the
+      touchscreen as needed.
+
+      The MCU communicates with the touchscreen IC via I2C, and this driver
+      is essential for managing touchscreen power and ensuring the display
+      operates correctly. By default, this option is enabled to ensure that
+      the touchscreen power management is active on supported systems.
+
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
