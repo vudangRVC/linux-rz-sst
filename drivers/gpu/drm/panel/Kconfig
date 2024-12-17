@@ -902,6 +902,24 @@ config DRM_PANEL_TRULY_NT35597_WQXGA
 	  Say Y here if you want to enable support for Truly NT35597 WQXGA Dual DSI
 	  Video Mode panel
 
+config DRM_PANEL_TOSHIBA_TC358762
+    tristate "Support for Toshiba TC358762"
+    depends on OF && I2C
+    depends on BACKLIGHT_CLASS_DEVICE
+    select VIDEOMODE_HELPERS
+    help
+      Enable support for the Toshiba TC358762 display bridge. This bridge is used
+      to interface with displays using the Toshiba TC358762 chip. The driver
+      allows for proper communication with the chip over I2C and configures the
+      panel for use on compatible systems.
+
+      If you say 'Y' here, the driver will be built into the kernel. If you say 'M',
+      it will be built as a module. The module can then be loaded and unloaded as needed.
+
+      To use this driver, you need a system with the Toshiba TC358762 bridge and
+      the necessary I2C and backlight support.
+
+
 config DRM_PANEL_VISIONOX_R66451
 	tristate "Visionox R66451"
 	depends on OF

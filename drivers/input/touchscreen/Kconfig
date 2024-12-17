@@ -1386,6 +1386,18 @@ config TOUCHSCREEN_ROHM_BU21023
 	  To compile this driver as a module, choose M here: the
 	  module will be called bu21023_ts.
 
+config TOUCHSCREEN_RZSBC_FT5406
+    tristate "Support for RZSBC FT5406 touchscreen"
+    default y
+    depends on I2C
+    help
+      Enable support for the FT5406 touchscreen controller on the RZSBC platform.
+      This driver provides functionality to interface with the FT5406 touchscreen
+      IC.
+
+      The driver communicates with the FT5406 via I2C and supports touchscreen
+      functionality on systems with compatible hardware.
+
 config TOUCHSCREEN_IQS5XX
 	tristate "Azoteq IQS550/572/525 trackpad/touchscreen controller"
 	depends on I2C
