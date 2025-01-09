@@ -998,6 +998,149 @@ error:
 	return ret;
 }
 
+static const struct v4l2_format_info rzg2l_cru_formats[] = {
+	{
+		.format			= V4L2_PIX_FMT_NV16,
+		.bpp[0]			= 1,
+	},
+	{
+		.format			= V4L2_PIX_FMT_GREY,
+		.bpp[0]			= 1,
+	},
+	{
+		.format			= V4L2_PIX_FMT_YUYV,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_UYVY,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_BGR24,
+		.bpp[0]			= 3,
+	},
+	{
+		.format			= V4L2_PIX_FMT_XBGR32,
+		.bpp[0]			= 4,
+	},
+	{
+		.format			= V4L2_PIX_FMT_ABGR32,
+		.bpp[0]			= 4,
+	},
+	{
+		.format			= V4L2_PIX_FMT_ARGB32,
+		.bpp[0]			= 4,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SRGGB8,
+		.bpp[0]			= 1,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SBGGR8,
+		.bpp[0]			= 1,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SGRBG8,
+		.bpp[0]			= 1,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SGBRG8,
+		.bpp[0]			= 1,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SRGGB10,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SBGGR10,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SGRBG10,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SGBRG10,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SRGGB12,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SBGGR12,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SGRBG12,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SGBRG12,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SRGGB14P,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SBGGR14P,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SGRBG14P,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SGBRG14P,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SRGGB16,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SBGGR16,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SGRBG16,
+		.bpp[0]			= 2,
+	},
+	{
+		.format			= V4L2_PIX_FMT_SGBRG16,
+		.bpp[0]			= 2,
+	},
+};
+
+const struct v4l2_format_info *rzg2l_cru_format_from_pixel(u32 format)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(rzg2l_cru_formats); i++)
+			if (rzg2l_cru_formats[i].format == format)
+					return rzg2l_cru_formats + i;
+
+	return NULL;
+}
+
+static u32 rzg2l_cru_format_bytesperline(struct v4l2_pix_format *pix)
+{
+	const struct v4l2_format_info *fmt;
+
+	fmt = rzg2l_cru_format_from_pixel(pix->pixelformat);
+
+	if (WARN_ON(!fmt))
+			return -EINVAL;
+
+	return pix->width * fmt->bpp[0];
+}
+
+static u32 rzg2l_cru_format_sizeimage(struct v4l2_pix_format *pix)
+{
+	return pix->bytesperline * pix->height;
+}
+
 /* -----------------------------------------------------------------------------
  * V4L2 stuff
  */

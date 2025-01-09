@@ -64,7 +64,15 @@
 
 #define ICnMS_IA			BIT(2)
 
+/* CRU Data Output Mode Register */
+#define ICnDMR_RGBMODE_RGB24		(0 << 0)
+#define ICnDMR_RGBMODE_XRGB32		(1 << 0)
+#define ICnDMR_RGBMODE_ABGR32		(2 << 0)
+#define ICnDMR_RGBMODE_ARGB32		(3 << 0)
+#define ICnDMR_YCMODE_YUYV		(0 << 4)
 #define ICnDMR_YCMODE_UYVY		(1 << 4)
+#define ICnDMR_YCMODE_NV16		(2 << 4)
+#define ICnDMR_YCMODE_GREY		(3 << 4)
 
 enum rzg2l_cru_common_regs {
 	CRUnCTRL,	/* CRU Control */
@@ -107,5 +115,9 @@ enum rzg2l_cru_common_regs {
 	ICnDMR,		/* CRU Data Output Mode */
 	RZG2L_CRU_MAX_REG,
 };
+
+/* UV Data Address Offset (Lower/Higher) Register for CRU Image Data */
+#define AMnUVAOFL			0x140
+#define AMnUVAOFH			0x144
 
 #endif /* __RZG2L_CRU_REGS_H__ */
