@@ -249,37 +249,40 @@ static int renesas_sdhi_card_busy(struct mmc_host *mmc)
 }
 
 static int renesas_sdhi_start_signal_voltage_switch(struct mmc_host *mmc,
-						    struct mmc_ios *ios)
+	struct mmc_ios *ios)
 {
 	struct tmio_mmc_host *host = mmc_priv(mmc);
 	struct renesas_sdhi *priv = host_to_priv(host);
 	struct pinctrl_state *pin_state;
 	int ret;
 
-	switch (ios->signal_voltage) {
-	case MMC_SIGNAL_VOLTAGE_330:
-		pin_state = priv->pins_default;
-		break;
-	case MMC_SIGNAL_VOLTAGE_180:
-		pin_state = priv->pins_uhs;
-		break;
-	default:
-		return -EINVAL;
+	if (priv->no_pin_volt_switch) {
+		ret = mmc_regulator_set_vqmmc(host->mmc, ios);
+		return (ret < 0) ? ret : 0;
+	} else {
+		switch (ios->signal_voltage) {
+		case MMC_SIGNAL_VOLTAGE_330:
+			pin_state = priv->pins_default;
+			break;
+		case MMC_SIGNAL_VOLTAGE_180:
+			pin_state = priv->pins_uhs;
+			break;
+		default:
+			return -EINVAL;
+		}
+		/*
+		* If anything is missing, assume signal voltage is fixed at
+		* 3.3V and succeed/fail accordingly.
+		*/
+		if (IS_ERR(priv->pinctrl) || IS_ERR(pin_state))
+			return ios->signal_voltage == MMC_SIGNAL_VOLTAGE_330 ? 0 : -EINVAL;
+
+		ret = mmc_regulator_set_vqmmc(host->mmc, ios);
+		if (ret < 0)
+			return ret;
+
+		return pinctrl_select_state(priv->pinctrl, pin_state);
 	}
-
-	/*
-	 * If anything is missing, assume signal voltage is fixed at
-	 * 3.3V and succeed/fail accordingly.
-	 */
-	if (IS_ERR(priv->pinctrl) || IS_ERR(pin_state))
-		return ios->signal_voltage ==
-			MMC_SIGNAL_VOLTAGE_330 ? 0 : -EINVAL;
-
-	ret = mmc_regulator_set_vqmmc(host->mmc, ios);
-	if (ret < 0)
-		return ret;
-
-	return pinctrl_select_state(priv->pinctrl, pin_state);
 }
 
 /* SCC registers */
@@ -714,6 +717,9 @@ static int renesas_sdhi_execute_tuning(struct mmc_host *mmc, u32 opcode)
 
 		if (cmd_error)
 			mmc_send_abort_tuning(mmc, opcode);
+
+		/* FIXME: Needed for some SD cards. The reason is not known yet */
+		usleep_range(1000, 2500);
 	}
 
 	ret = renesas_sdhi_select_tuning(host);
@@ -958,12 +964,16 @@ int renesas_sdhi_probe(struct platform_device *pdev,
 	if (IS_ERR(priv->rstc))
 		return PTR_ERR(priv->rstc);
 
-	priv->pinctrl = devm_pinctrl_get(&pdev->dev);
-	if (!IS_ERR(priv->pinctrl)) {
-		priv->pins_default = pinctrl_lookup_state(priv->pinctrl,
+	priv->no_pin_volt_switch = device_property_read_bool(&pdev->dev,
+			"mmc-no-pin-volt-switch");
+	if (!priv->no_pin_volt_switch) {
+		priv->pinctrl = devm_pinctrl_get(&pdev->dev);
+		if (!IS_ERR(priv->pinctrl)) {
+			priv->pins_default = pinctrl_lookup_state(priv->pinctrl,
 						PINCTRL_STATE_DEFAULT);
-		priv->pins_uhs = pinctrl_lookup_state(priv->pinctrl,
+			priv->pins_uhs = pinctrl_lookup_state(priv->pinctrl,
 						"state_uhs");
+		}
 	}
 
 	host = tmio_mmc_host_alloc(pdev, mmc_data);
