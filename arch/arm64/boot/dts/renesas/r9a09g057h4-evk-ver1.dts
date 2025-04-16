@@ -18,7 +18,7 @@
 		serial0 = &scif;
 		mmc0 = &sdhi0;
 		mmc1 = &sdhi1;
-		mmc2 = &sdhi2;
+		mmc2 = &sdhi2;	
 		ethernet0 = &eth0;
 		ethernet1 = &eth1;
         };
@@ -140,6 +140,16 @@
 };
 
 &pinctrl {
+	can0_pins: can0 {
+		pinmux = <RZV2H_PORT_PINMUX(8, 0, 5)>, /* TX */
+			 <RZV2H_PORT_PINMUX(8, 1, 5)>; /* RX */
+	};
+
+	can1_pins: can1 {
+		pinmux = <RZV2H_PORT_PINMUX(8, 2, 5)>, /* TX */
+			 <RZV2H_PORT_PINMUX(8, 3, 5)>; /* RX */
+	};
+
 	scif_pins: scif {
 		pins =  "SCIF_RXD", "SCIF_TXD";
 		renesas,output-impedance = <1>;
@@ -219,6 +229,20 @@
 	pinctrl-names = "default";
 
 	status = "okay";
+};
+
+&canfd {
+	pinctrl-0 = <&can0_pins &can1_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	channel0 {
+		status = "okay";
+	};
+
+	channel1 {
+		status = "okay";
+	};
 };
 
 &sdhi0 {
@@ -348,4 +372,20 @@
 			};
 		};
 	};
+};
+
+&wdt1 {
+	status = "okay";
+};
+
+&rtc {
+	status = "okay";
+};
+
+&cmtw0 {
+	status = "okay";
+};
+
+&cmtw1 {
+	status = "okay";
 };
