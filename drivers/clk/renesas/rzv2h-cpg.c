@@ -24,6 +24,7 @@
 #include <linux/pm_clock.h>
 #include <linux/pm_domain.h>
 #include <linux/reset-controller.h>
+#include <linux/units.h>
 
 #include <dt-bindings/clock/renesas-cpg-mssr.h>
 
@@ -40,6 +41,23 @@
 #define GET_RST_OFFSET(x)	(0x900 + ((x) * 4))
 #define GET_RST_MON_OFFSET(x)	(0xA00 + ((x) * 4))
 
+#define PLL_RESETB		BIT(0)
+#define PLL_SSC_EN		BIT(2)
+#define PLL_RESETB_WEN		BIT(16)
+#define PLL_SSC_EN_WEN		BIT(18)
+
+#define PLL_MON_RESETB		BIT(0)
+#define PLL_MON_LOCK		BIT(4)
+
+#define PLL_FVCO_MIN		(1600000000)
+#define PLL_FVCO_MAX		(3200000000)
+#define PLL_DIV_P_MIN		(1)
+#define PLL_DIV_P_MAX		(4)
+#define PLL_DIV_M_MIN		(64)
+#define PLL_DIV_M_MAX		(533)
+#define PLL_DIV_S_MIN		(0)
+#define PLL_DIV_S_MAX		(6)
+
 #define KDIV(val)		((s16)FIELD_GET(GENMASK(31, 16), (val)))
 #define MDIV(val)		FIELD_GET(GENMASK(15, 6), (val))
 #define PDIV(val)		FIELD_GET(GENMASK(5, 0), (val))
@@ -51,6 +69,10 @@
             ((base) + ((((index) * (16))) + (bit)))
 
 #define CPG_CLKSTATUS0		(0x700)
+
+#define MAX_VCLK_FREQ		(187500000)
+#define MIN_VCLK_FREQ		(5440000)
+#define LIMIT_VCLK_FREQ		(25000000)
 
 /**
 * struct rzv2h_cpg_priv - Clock Pulse Generator Private Data
@@ -89,6 +111,8 @@ struct pll_clk {
     struct clk_hw hw;
     unsigned int conf;
     unsigned int type;
+    unsigned long min;
+    unsigned long max;
 };
 
 #define to_pll(_hw)	container_of(_hw, struct pll_clk, hw)
@@ -148,9 +172,202 @@ static unsigned long rzv2h_cpg_pll_clk_recalc_rate(struct clk_hw *hw,
 
     return DIV_ROUND_CLOSEST_ULL(rate, PDIV(clk1));
 }
+struct rzv2h_pll_div_hw_data {
+    struct clk_hw hw;
+    u32 conf;
+    u32 div;
+    u32 mult;
+    struct rzv2h_cpg_priv *priv;
+};
+
+#define to_rzv2h_pll_div_hw_data(_hw) \
+            container_of(_hw, struct rzv2h_pll_div_hw_data, hw)
+
+static unsigned long rzv2h_cpg_pll_div_recalc_rate(struct clk_hw *hw,
+                        unsigned long parent_rate)
+{
+    struct rzv2h_pll_div_hw_data *pll_div = to_rzv2h_pll_div_hw_data(hw);
+    unsigned long long int rate;
+
+    rate = (unsigned long long int) parent_rate * pll_div->mult;
+    do_div(rate, pll_div->div);
+
+    return (unsigned long)rate;
+}
+
+static int rzv2h_cpg_pll_div_determine_rate(struct clk_hw *hw,
+                        struct clk_rate_request *req)
+{
+    struct rzv2h_pll_div_hw_data *pll_div = to_rzv2h_pll_div_hw_data(hw);
+
+    req->best_parent_rate = (req->rate / pll_div->mult) * pll_div->div;
+
+    return 0;
+};
+
+static int rzv2h_cpg_pll_div_set_rate(struct clk_hw *hw,
+                    unsigned long rate,
+                    unsigned long parent_rate)
+{
+    /*
+    * We must report success but we can do so unconditionally because
+    * clk_factor_round_rate returns values that ensure this call is a
+    * nop.
+    */
+    return 0;
+};
+
+static const struct clk_ops rzv2h_cpg_pll_div_ops = {
+    .recalc_rate = rzv2h_cpg_pll_div_recalc_rate,
+    .determine_rate = rzv2h_cpg_pll_div_determine_rate,
+    .set_rate = rzv2h_cpg_pll_div_set_rate,
+};
+
+static struct clk * __init
+rzv2h_cpg_pll_div_clk_register(const struct cpg_core_clk *core,
+                struct clk **clks,
+                struct rzv2h_cpg_priv *priv)
+{
+    struct rzv2h_pll_div_hw_data *clk_hw_data;
+    const struct clk *parent;
+    const char *parent_name;
+    struct clk_init_data init;
+    struct clk_hw *clk_hw;
+    int ret;
+
+    parent = clks[core->parent & 0xffff];
+    if (IS_ERR(parent))
+        return ERR_CAST(parent);
+
+    clk_hw_data = devm_kzalloc(priv->dev, sizeof(*clk_hw_data), GFP_KERNEL);
+    if (!clk_hw_data)
+        return ERR_PTR(-ENOMEM);
+
+    clk_hw_data->priv = priv;
+    clk_hw_data->div = core->div;
+    clk_hw_data->mult = core->mult;
+
+    parent_name = __clk_get_name(parent);
+    init.name = core->name;
+    init.ops = &rzv2h_cpg_pll_div_ops;
+    init.flags = CLK_SET_RATE_PARENT;
+    init.parent_names = &parent_name;
+    init.num_parents = 1;
+
+    clk_hw = &clk_hw_data->hw;
+    clk_hw->init = &init;
+
+    ret = devm_clk_hw_register(priv->dev, clk_hw);
+    if (ret)
+        return ERR_PTR(ret);
+
+    return clk_hw->clk;
+}
+
 
 static const struct clk_ops rzv2h_cpg_pll_ops = {
     .recalc_rate = rzv2h_cpg_pll_clk_recalc_rate,
+};
+
+static int rzv2h_cpg_plldsi_determine_rate(struct clk_hw *hw,
+                    struct clk_rate_request *req)
+{
+    return 0;
+}
+
+static int rzv2h_cpg_plldsi_set_rate(struct clk_hw *hw,
+                    unsigned long rate,
+                    unsigned long parent_rate)
+{
+    struct pll_clk *pll_clk = to_pll(hw);
+    struct rzv2h_cpg_priv *priv = pll_clk->priv;
+    u32 pll_m, pll_p, pll_s, val;
+    int pll_k;
+    u32 conf = pll_clk->conf;
+    unsigned long fvco, osc;
+    int ret;
+
+    if (rate > (pll_clk->max * MEGA))
+        rate = pll_clk->max;
+    else if (rate < (pll_clk->min * MEGA))
+        rate = pll_clk->min;
+
+    osc = EXTAL_FREQ_IN_MEGA_HZ * MEGA;
+    for (pll_s = PLL_DIV_S_MIN; pll_s <= PLL_DIV_S_MAX; pll_s++) {
+        /* Check available range of FVCO */
+        fvco = rate << (1 * pll_s);
+        if ((fvco > PLL_FVCO_MAX) || (fvco < PLL_FVCO_MIN))
+            continue;
+
+        for (pll_p = PLL_DIV_P_MIN; pll_p <= PLL_DIV_P_MAX; pll_p++) {
+            pll_m = ((u64) (fvco * pll_p) / osc);
+            pll_k = ((u64)(fvco * pll_p) % osc);
+
+            /* Check available range of DIV_K */
+            if (pll_k >= (osc / 2)) {
+                pll_m++;
+                pll_k = pll_k - osc;
+            }
+
+            /* Check available range of DIV_M */
+            if ((pll_m < PLL_DIV_M_MIN) ||
+                (pll_m > PLL_DIV_M_MAX))
+                continue;
+
+            pll_k = DIV_S64_ROUND_CLOSEST(((s64)pll_k << 16), osc);
+
+            goto found;
+        }
+    }
+
+    dev_err(priv->dev, "failed to set %s to rate %lu\n",
+        clk_hw_get_name(hw), rate);
+    return -EINVAL;
+
+found:
+    dev_dbg(priv->dev,
+        "rate: %ld pll_k: %hd, pll_m: %d, pll_p: %d, pll_s: %d\n",
+        rate, pll_k, pll_m, pll_p, pll_s);
+
+    /* Put PLL into standby mode and wait until unlocked */
+    writel(PLL_RESETB_WEN, priv->base + PLL_STBY_OFFSET(conf));
+    ret = readl_poll_timeout(priv->base + PLL_MON_OFFSET(conf),
+                val, !(val & PLL_MON_LOCK),
+                100, 250000);
+    if (ret) {
+        dev_err(priv->dev, "failed to put PLLDSI to stanby mode");
+        return ret;
+    }
+
+    /* Output clock setting 1 */
+    writel(((s16)pll_k << 16) | (pll_m << 6) | (pll_p),
+        priv->base + PLL_CLK1_OFFSET(conf));
+
+    /* Output clock setting 2 */
+    val = readl(priv->base + PLL_CLK2_OFFSET(conf));
+    writel((val & ~GENMASK(2, 0)) | pll_s,
+        priv->base + PLL_CLK2_OFFSET(conf));
+
+    /* Put PLL to normal mode and disable SSC */
+    writel(PLL_RESETB | PLL_RESETB_WEN | PLL_SSC_EN_WEN,
+        priv->base + PLL_STBY_OFFSET(conf));
+
+    /* PLL normal mode transition, output clock stability check */
+    ret = readl_poll_timeout(priv->base + PLL_MON_OFFSET(conf),
+                val, (val & PLL_MON_LOCK),
+                100, 250000);
+    if (ret) {
+        dev_err(priv->dev, "failed to put PLLDSI to normal mode");
+        return ret;
+    }
+
+    return 0;
+};
+
+static const struct clk_ops rzv2h_cpg_plldsi_ops = {
+    .recalc_rate = rzv2h_cpg_pll_clk_recalc_rate,
+    .determine_rate = rzv2h_cpg_plldsi_determine_rate,
+    .set_rate = rzv2h_cpg_plldsi_set_rate,
 };
 
 static struct clk * __init
@@ -182,10 +399,15 @@ rzv2h_cpg_pll_clk_register(const struct cpg_core_clk *core,
     init.num_parents = 1;
 
     pll_clk->hw.init = &init;
-    pll_clk->conf = core->cfg.conf;
+    pll_clk->conf = core->cfg.pll.conf;
+    pll_clk->min = core->cfg.pll.min;
+    pll_clk->max = core->cfg.pll.max;
     pll_clk->base = base;
     pll_clk->priv = priv;
     pll_clk->type = core->type;
+
+    if (pll_clk->max < pll_clk->min)
+        return ERR_PTR(-EINVAL);
 
     ret = devm_clk_hw_register(dev, &pll_clk->hw);
     if (ret)
@@ -250,6 +472,7 @@ static int rzv2h_sddiv_set_rate(struct clk_hw *hw, unsigned long rate,
     if (value < 0)
         return value;
 
+
     spin_lock_irqsave(divider->lock, flags);
 
     /* Only ddiv support monitor register */
@@ -289,9 +512,32 @@ static const struct clk_ops rzv2h_sddiv_clk_divider_ops = {
     .set_rate = rzv2h_sddiv_set_rate,
 };
 
+static int rzv2h_plldsi_sdiv_determine_rate(struct clk_hw *hw,
+                        struct clk_rate_request *req)
+{
+    if (req->rate > MAX_VCLK_FREQ)
+        req->rate = MAX_VCLK_FREQ;
+    else if (req->rate < MIN_VCLK_FREQ)
+        req->rate = MIN_VCLK_FREQ;
+
+    if (req->rate < LIMIT_VCLK_FREQ)
+        req->best_parent_rate = req->rate * 6;
+    else
+        req->best_parent_rate = req->rate * 2;
+
+    return 0;
+};
+
+static const struct clk_ops rzv2h_plldsi_sdiv_ops = {
+    .recalc_rate = rzv2h_sddiv_recalc_rate,
+    .determine_rate = rzv2h_plldsi_sdiv_determine_rate,
+    .set_rate = rzv2h_sddiv_set_rate,
+};
+
 static struct clk * __init
 rzv2h_cpg_sddiv_clk_register(const struct cpg_core_clk *core,
-                struct rzv2h_cpg_priv *priv)
+                struct rzv2h_cpg_priv *priv,
+                const struct clk_ops *ops)
 {
     struct sddiv cfg_sddiv = core->cfg.sddiv;
     struct clk_init_data init = {};
@@ -318,9 +564,11 @@ rzv2h_cpg_sddiv_clk_register(const struct cpg_core_clk *core,
         return ERR_PTR(-ENOMEM);
 
     init.name = core->name;
-    init.ops = &rzv2h_sddiv_clk_divider_ops;
+    init.ops = ops;
     init.parent_names = &parent_name;
     init.num_parents = 1;
+    if (core->type == CLK_TYPE_PLLDSI_SDIV)
+        init.flags = CLK_SET_RATE_PARENT;
 
     sddiv->priv = priv;
     sddiv->mon = cfg_sddiv.monbit;
@@ -416,6 +664,7 @@ rzv2h_cpg_register_core_clk(const struct cpg_core_clk *core,
     struct device *dev = priv->dev;
     const char *parent_name;
     struct clk_hw *clk_hw;
+    const struct clk_ops *ops;
 
     WARN_DEBUG(id >= priv->num_core_clks);
     WARN_DEBUG(PTR_ERR(priv->clks[id]) != -ENOENT);
@@ -442,14 +691,24 @@ rzv2h_cpg_register_core_clk(const struct cpg_core_clk *core,
             clk = clk_hw->clk;
         break;
     case CLK_TYPE_PLL:
-        clk = rzv2h_cpg_pll_clk_register(core, priv, &rzv2h_cpg_pll_ops);
+    case CLK_TYPE_PLLDSI:
+        ops = (core->type == CLK_TYPE_PLLDSI) ?
+            &rzv2h_cpg_plldsi_ops : &rzv2h_cpg_pll_ops;
+        clk = rzv2h_cpg_pll_clk_register(core, priv, ops);
         break;
     case CLK_TYPE_SDIV:
     case CLK_TYPE_DDIV:
-        clk = rzv2h_cpg_sddiv_clk_register(core, priv);
+    case CLK_TYPE_PLLDSI_SDIV:
+        ops = (core->type == CLK_TYPE_PLLDSI_SDIV) ?
+            &rzv2h_plldsi_sdiv_ops :
+            &rzv2h_sddiv_clk_divider_ops;
+        clk = rzv2h_cpg_sddiv_clk_register(core, priv, ops);
         break;
     case CLK_TYPE_MUX:
         clk = rzv2h_cpg_mux_clk_register(core, priv->base, priv);
+        break;
+    case CLK_TYPE_PLL_DIV:
+        clk = rzv2h_cpg_pll_div_clk_register(core, priv->clks, priv);
         break;
     default:
         goto fail;
