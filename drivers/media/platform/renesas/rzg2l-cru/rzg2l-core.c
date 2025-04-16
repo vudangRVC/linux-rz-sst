@@ -73,6 +73,7 @@ static int rzg2l_cru_group_notify_complete(struct v4l2_async_notifier *notifier)
 		return ret;
 	}
 	cru->csi.channel = 0;
+	cru->svc_channel = cru->csi.channel;
 	cru->ip.remote = cru->csi.subdev;
 
 	/* Create media device link between CRU IP <-> CRU OUTPUT */
@@ -246,6 +247,24 @@ static int rzg2l_cru_media_init(struct rzg2l_cru_dev *cru)
 	if (ret)
 		return ret;
 
+	if (cru->info->max_cru_channels > 1) {
+		ret = of_property_read_u32(cru->dev->of_node, "channel,id", &cru->id);
+		if (ret) {
+			if (cru->info->cru_type == RZV2H_CRU_TYPE) {
+				dev_err(cru->dev, "%pOF: No channel,id property found\n",
+						cru->dev->of_node);
+				return -EINVAL;
+			}
+			cru->id = 0;
+		}
+	}
+
+	if (cru->id >= cru->info->max_cru_channels) {
+		dev_err(cru->dev, "%pOF: Invalid channel,id '%u'\n",
+			cru->dev->of_node, cru->id);
+		return -EINVAL;
+	}
+
 	mutex_init(&cru->mdev_lock);
 	mdev = &cru->mdev;
 	mdev->dev = cru->dev;
@@ -274,10 +293,11 @@ static int rzg2l_cru_media_init(struct rzg2l_cru_dev *cru)
 static int rzg2l_cru_probe(struct platform_device *pdev)
 {
 	struct rzg2l_cru_dev *cru;
+	struct device *dev = &pdev->dev;
 	struct v4l2_ctrl *ctrl;
 	int ret;
 
-	cru = devm_kzalloc(&pdev->dev, sizeof(*cru), GFP_KERNEL);
+	cru = devm_kzalloc(dev, sizeof(*cru), GFP_KERNEL);
 	if (!cru)
 		return -ENOMEM;
 
@@ -285,23 +305,23 @@ static int rzg2l_cru_probe(struct platform_device *pdev)
 	if (IS_ERR(cru->base))
 		return PTR_ERR(cru->base);
 
-	cru->presetn = devm_reset_control_get_shared(&pdev->dev, "presetn");
+	cru->presetn = devm_reset_control_get_shared(dev, "presetn");
 	if (IS_ERR(cru->presetn))
 		return dev_err_probe(&pdev->dev, PTR_ERR(cru->presetn),
 				     "Failed to get cpg presetn\n");
 
-	cru->aresetn = devm_reset_control_get_exclusive(&pdev->dev, "aresetn");
+	cru->aresetn = devm_reset_control_get_exclusive(dev, "aresetn");
 	if (IS_ERR(cru->aresetn))
 		return dev_err_probe(&pdev->dev, PTR_ERR(cru->aresetn),
 				     "Failed to get cpg aresetn\n");
 
-	cru->vclk = devm_clk_get(&pdev->dev, "video");
+	cru->vclk = devm_clk_get(dev, "video");
 	if (IS_ERR(cru->vclk))
-		return dev_err_probe(&pdev->dev, PTR_ERR(cru->vclk),
+		return dev_err_probe(dev, PTR_ERR(cru->vclk),
 				     "Failed to get video clock\n");
 
-	cru->dev = &pdev->dev;
-	cru->info = of_device_get_match_data(&pdev->dev);
+	cru->dev = dev;
+	cru->info = of_device_get_match_data(dev);
 
 	cru->image_conv_irq = platform_get_irq(pdev, 0);
 	if (cru->image_conv_irq < 0)
@@ -314,8 +334,8 @@ static int rzg2l_cru_probe(struct platform_device *pdev)
 		return ret;
 
 	cru->num_buf = RZG2L_CRU_HW_BUFFER_DEFAULT;
-	pm_suspend_ignore_children(&pdev->dev, true);
-	pm_runtime_enable(&pdev->dev);
+	pm_suspend_ignore_children(dev, true);
+ 	pm_runtime_enable(dev);
 
 	ret = rzg2l_cru_media_init(cru);
 	if (ret)
@@ -348,7 +368,7 @@ free_ctrl:
 	
 error_dma_unregister:
 	rzg2l_cru_dma_unregister(cru);
-	pm_runtime_disable(&pdev->dev);
+	pm_runtime_disable(dev);
 
 	return ret;
 }
@@ -369,8 +389,109 @@ static void rzg2l_cru_remove(struct platform_device *pdev)
 	rzg2l_cru_dma_unregister(cru);
 }
 
+static const u16 rzg2l_cru_regs[CRU_REGS_END] = {
+	[CRUnCTRL] = 0x0,
+	[CRUnIE] = 0x4,
+	[CRUnINTS] = 0x8,
+	[CRUnRST] = 0xC,
+	[AMnMB1ADDRL] = 0x100,
+	[AMnMB1ADDRH] = 0x104,
+	[AMnMB2ADDRL] = 0x108,
+	[AMnMB2ADDRH] = 0x10C,
+	[AMnMB3ADDRL] = 0x110,
+	[AMnMB3ADDRH] = 0x114,
+	[AMnMB4ADDRL] = 0x118,
+	[AMnMB4ADDRH] = 0x11C,
+	[AMnMB5ADDRL] = 0x120,
+	[AMnMB5ADDRH] = 0x124,
+	[AMnMB6ADDRL] = 0x128,
+	[AMnMB6ADDRH] = 0x12C,
+	[AMnMB7ADDRL] = 0x130,
+	[AMnMB7ADDRH] = 0x134,
+	[AMnMB8ADDRL] = 0x138,
+	[AMnMB8ADDRH] = 0x13C,
+	[AMnMBVALID] = 0x148,
+	[AMnMBS] = 0x14C,
+	[AMnAXIATTR] = 0x158,
+	[AMnFIFO] = 0x160,
+	[AMnFIFOPNTR] = 0x168,
+	[AMnAXISTP] = 0x174,
+	[AMnAXISTPACK] = 0x178,
+	[ICnEN] = 0x200,
+	[ICnMC] = 0x208,
+	[ICnMS] = 0x254,
+	[ICnDMR] = 0x26C,
+};
+
+static const u16 rzv2h_cru_regs[CRU_REGS_END] = {
+	[CRUnCTRL] = 0x0,
+	[CRUnIE] = 0x4,
+	[CRUnIE2] = 0x8,
+	[CRUnINTS] = 0xC,
+	[CRUnINTS2] = 0x10,
+	[CRUnRST] = 0x18,
+	[AMnMB1ADDRL] = 0x40,
+	[AMnMB1ADDRH] = 0x44,
+	[AMnMB2ADDRL] = 0x48,
+	[AMnMB2ADDRH] = 0x4C,
+	[AMnMB3ADDRL] = 0x50,
+	[AMnMB3ADDRH] = 0x54,
+	[AMnMB4ADDRL] = 0x58,
+	[AMnMB4ADDRH] = 0x5c,
+	[AMnMB5ADDRL] = 0x60,
+	[AMnMB5ADDRH] = 0x64,
+	[AMnMB6ADDRL] = 0x68,
+	[AMnMB6ADDRH] = 0x6C,
+	[AMnMB7ADDRL] = 0x70,
+	[AMnMB7ADDRH] = 0x74,
+	[AMnMB8ADDRL] = 0x78,
+	[AMnMB8ADDRH] = 0x7C,
+	[AMnMBVALID] = 0x88,
+	[AMnMADRSL] = 0x8C,
+	[AMnMADRSH] = 0x90,
+	[AMnFIFO] = 0x0F0,
+	[AMnFIFOPNTR] = 0xF8,
+	[AMnAXIATTR] = 0x0EC,
+	[AMnAXISTP] = 0x110,
+	[AMnAXISTPACK] = 0x114,
+	[AMnIS] = 0x128,
+	[ICnEN] = 0x1F0,
+	[ICnSVCNUM] = 0x1F8,
+	[ICnSVC] = 0x1FC,
+	[ICnIPMC_C0] = 0x200,
+	[ICnMS] = 0x2D8,
+	[ICnDMR] = 0x304,
+	[ICnTICTRL1] = 0x35C,
+	[ICnTICTRL2] = 0x360,
+	[ICnTISIZE1] = 0x364,
+	[ICnTISIZE2] = 0x368,
+};
+
+static const struct rzg2l_cru_info rzg2l_cru_info = {
+	.cru_type = RZG2L_CRU_TYPE,
+	.regs = rzg2l_cru_regs,
+	.max_width = 2800,
+	.max_height = 4095,
+	.max_cru_channels = 1,
+};
+
+static const struct rzg2l_cru_info rzv2h_cru_info = {
+	.cru_type = RZV2H_CRU_TYPE,
+	.regs = rzv2h_cru_regs,
+	.max_width = 4095,
+	.max_height = 4095,
+	.max_cru_channels = 4,
+};
+
 static const struct of_device_id rzg2l_cru_of_id_table[] = {
-	{ .compatible = "renesas,rzg2l-cru", },
+	{
+		.compatible = "renesas,rzg2l-cru",
+		.data = &rzg2l_cru_info,
+	},
+	{
+		.compatible = "renesas,rzv2h-cru",
+		.data = &rzv2h_cru_info,
+	},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, rzg2l_cru_of_id_table);

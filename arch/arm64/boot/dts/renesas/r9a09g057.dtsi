@@ -898,7 +898,7 @@
  				};
  			};
  		};
-
+ 
  		cru1: video1@16010000 {
  			compatible = "renesas,cru-r9a09g057", "renesas,rzv2h-cru";
  			reg = <0 0x16010000 0 0x400>;
@@ -913,14 +913,14 @@
  			power-domains = <&cpg>;
  			channel,id = <1>;
  			status = "disabled";
-
+ 
  			ports {
  				#address-cells = <1>;
  				#size-cells = <0>;
-
+ 
  				port@1 {
  					reg = <1>;
-
+ 
  					cru1_to_csi21: endpoint {
  						remote-endpoint =
  							<&csi21_to_cru1>;
@@ -928,7 +928,7 @@
  				};
  			};
  		};
-
+ 
  		cru2: video2@16020000 {
  			compatible = "renesas,cru-r9a09g057", "renesas,rzv2h-cru";
  			reg = <0 0x16020000 0 0x400>;
@@ -943,14 +943,14 @@
  			power-domains = <&cpg>;
  			channel,id = <2>;
  			status = "disabled";
-
+ 
  			ports {
  				#address-cells = <1>;
  				#size-cells = <0>;
-
+ 
  				port@1 {
  					reg = <1>;
-
+ 
  					cru2_to_csi22: endpoint {
  						remote-endpoint =
  							<&csi22_to_cru2>;
@@ -958,7 +958,7 @@
  				};
  			};
  		};
-
+ 
  		cru3: video3@16030000 {
  			compatible = "renesas,cru-r9a09g057", "renesas,rzv2h-cru";
  			reg = <0 0x16030000 0 0x400>;
@@ -973,14 +973,14 @@
  			power-domains = <&cpg>;
  			channel,id = <3>;
  			status = "disabled";
-
+ 
  			ports {
  				#address-cells = <1>;
  				#size-cells = <0>;
-
+ 
  				port@1 {
  					reg = <1>;
-
+ 
  					cru3_to_csi23: endpoint {
  						remote-endpoint =
  							<&csi23_to_cru3>;
@@ -988,7 +988,7 @@
  				};
  			};
  		};
-
+ 
  		csi20: csi20@16000400 {
  			compatible = "renesas,r9a09g057-csi2", "renesas,rzv2h-csi2";
  			reg = <0 0x16000400 0 0xc00>;
@@ -1000,14 +1000,14 @@
  				 <&cpg 199>;
  			reset-names ="presetn", "cmn-rstb";
  			status = "disabled";
-
+ 
  			ports {
  				#address-cells = <1>;
  				#size-cells = <0>;
-
+ 
  				port@1 {
  					reg = <1>;
-
+ 
  					csi20_to_cru0: endpoint {
  						remote-endpoint =
  							<&cru0_to_csi20>;
@@ -1015,7 +1015,7 @@
  				};
  			};
  		};
-
+ 
  		csi21: csi21@16010400 {
  			compatible = "renesas,r9a09g057-csi2", "renesas,rzv2h-csi2";
  			reg = <0 0x16010400 0 0xc00>;
@@ -1027,14 +1027,14 @@
  				 <&cpg 202>;
  			reset-names = "presetn", "cmn-rstb";
  			status = "disabled";
-
+ 
  			ports {
  				#address-cells = <1>;
  				#size-cells = <0>;
-
+ 
  				port@1 {
  					reg = <1>;
-
+ 
  					csi21_to_cru1: endpoint {
  						remote-endpoint =
  							<&cru1_to_csi21>;
@@ -1042,7 +1042,7 @@
  				};
  			};
  		};
-
+ 
  		csi22: csi22@16020400 {
  			compatible = "renesas,r9a09g057-csi2", "renesas,rzv2h-csi2";
  			reg = <0 0x16020400 0 0xc00>;
@@ -1054,14 +1054,14 @@
  				 <&cpg 205>;
  			reset-names = "presetn", "cmn-rstb";
  			status = "disabled";
-
+ 
  			ports {
  				#address-cells = <1>;
  				#size-cells = <0>;
-
+ 
  				port@1 {
  					reg = <1>;
-
+ 
  					csi22_to_cru2: endpoint {
  						remote-endpoint =
  							<&cru2_to_csi22>;
@@ -1069,7 +1069,7 @@
  				};
  			};
  		};
-
+ 
  		csi23: csi23@16030400 {
  			compatible = "renesas,r9a09g057-csi2", "renesas,rzv2h-csi2";
  			reg = <0 0x16030400 0 0xc00>;
@@ -1081,14 +1081,14 @@
  				 <&cpg 208>;
  			reset-names ="presetn", "cmn-rstb";
  			status = "disabled";
-
+ 
  			ports {
  				#address-cells = <1>;
  				#size-cells = <0>;
-
+ 
  				port@1 {
  					reg = <1>;
-
+ 
  					csi23_to_cru3: endpoint {
  						remote-endpoint =
  							<&cru3_to_csi23>;
