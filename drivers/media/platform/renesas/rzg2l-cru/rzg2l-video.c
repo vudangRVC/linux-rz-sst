@@ -70,11 +70,28 @@
 #define ICnSVC_SVC2(x)			((x) << 8)
 #define ICnSVC_SVC3(x)			((x) << 12)
 
+/* CRU Image Processing Main Control Register */
+#define ICnMC_DEMTHR			BIT(3)
 #define ICnMC_CSCTHR			BIT(5)
 #define ICnMC_INF_YUV8_422		(0x1e << 16)
+#define ICnMC_INF_YUV10_422		(0x1F << 16)
+#define ICnMC_INF_RGB444		(0x20 << 16)
+#define ICnMC_INF_RGB565		(0x22 << 16)
+#define ICnMC_INF_RGB666		(0x23 << 16)
+#define ICnMC_INF_RGB888		(0x24 << 16)
+#define ICnMC_INF_RAW8			(0x2A << 16)
+#define ICnMC_INF_RAW10			(0x2B << 16)
+#define ICnMC_INF_RAW12			(0x2C << 16)
+#define ICnMC_INF_RAW14			(0x2D << 16)
+#define ICnMC_INF_RAW16			(0x2E << 16)
 #define ICnMC_INF_USER			(0x30 << 16)
 #define ICnMC_VCSEL(x)			((x) << 22)
 #define ICnMC_INF_MASK			GENMASK(21, 16)
+#define ICnMC_RAWSTTYP_RGRG		0
+#define ICnMC_RAWSTTYP_GRGR		BIT(24)
+#define ICnMC_RAWSTTYP_GBGB		BIT(25)
+#define ICnMC_RAWSTTYP_BGBG		(BIT(25) | BIT(24))
+#define ICnMC_RAWSTTYP_MASK		(BIT(25) | BIT(24))
 
 #define ICnMS_IA			BIT(2)
 
@@ -353,14 +370,75 @@ static void rzg2l_cru_initialize_axi(struct rzg2l_cru_dev *cru)
 }
 
 static void rzg2l_cru_csi2_setup(struct rzg2l_cru_dev *cru, bool *input_is_yuv,
-				struct v4l2_mbus_framefmt *ip_sd_fmt)
+				bool *input_is_bayer_raw, struct v4l2_mbus_framefmt *ip_sd_fmt)
 {
 	u32 icnmc;
 
+	/* Determine input format and YUV status */
 	switch (ip_sd_fmt->code) {
 	case MEDIA_BUS_FMT_UYVY8_1X16:
 		icnmc = ICnMC_INF_YUV8_422;
 		*input_is_yuv = true;
+		break;
+	case MEDIA_BUS_FMT_UYVY10_2X10:
+		icnmc = ICnMC_INF_YUV10_422;
+		*input_is_yuv = true;
+		break;
+	case MEDIA_BUS_FMT_RGB444_1X12:
+		icnmc = ICnMC_INF_RGB444;
+		*input_is_yuv = false;
+		break;
+	case MEDIA_BUS_FMT_RGB565_2X8_LE:
+		icnmc = ICnMC_INF_RGB565;
+		*input_is_yuv = false;
+		break;
+	case MEDIA_BUS_FMT_RGB666_1X18:
+		icnmc = ICnMC_INF_RGB666;
+		*input_is_yuv = false;
+		break;
+	case MEDIA_BUS_FMT_RGB888_1X24:
+		icnmc = ICnMC_INF_RGB888;
+		*input_is_yuv = false;
+		break;
+	case MEDIA_BUS_FMT_SRGGB8_1X8:
+	case MEDIA_BUS_FMT_SGRBG8_1X8:
+	case MEDIA_BUS_FMT_SGBRG8_1X8:
+	case MEDIA_BUS_FMT_SBGGR8_1X8:
+		icnmc = ICnMC_INF_RAW8;
+		*input_is_yuv = false;
+		*input_is_bayer_raw = true;
+		break;
+	case MEDIA_BUS_FMT_SRGGB10_1X10:
+	case MEDIA_BUS_FMT_SGRBG10_1X10:
+	case MEDIA_BUS_FMT_SGBRG10_1X10:
+	case MEDIA_BUS_FMT_SBGGR10_1X10:
+		icnmc = ICnMC_INF_RAW10;
+		*input_is_yuv = false;
+		*input_is_bayer_raw = true;
+		break;
+	case MEDIA_BUS_FMT_SRGGB12_1X12:
+	case MEDIA_BUS_FMT_SGRBG12_1X12:
+	case MEDIA_BUS_FMT_SGBRG12_1X12:
+	case MEDIA_BUS_FMT_SBGGR12_1X12:
+		icnmc = ICnMC_INF_RAW12;
+		*input_is_yuv = false;
+		*input_is_bayer_raw = true;
+		break;
+	case MEDIA_BUS_FMT_SRGGB14_1X14:
+	case MEDIA_BUS_FMT_SGRBG14_1X14:
+	case MEDIA_BUS_FMT_SGBRG14_1X14:
+	case MEDIA_BUS_FMT_SBGGR14_1X14:
+		icnmc = ICnMC_INF_RAW14;
+		*input_is_yuv = false;
+		*input_is_bayer_raw = true;
+		break;
+	case MEDIA_BUS_FMT_SRGGB16_1X16:
+	case MEDIA_BUS_FMT_SGRBG16_1X16:
+	case MEDIA_BUS_FMT_SGBRG16_1X16:
+	case MEDIA_BUS_FMT_SBGGR16_1X16:
+		icnmc = ICnMC_INF_RAW16;
+		*input_is_yuv = false;
+		*input_is_bayer_raw = true;
 		break;
 	default:
 		*input_is_yuv = false;
@@ -368,6 +446,7 @@ static void rzg2l_cru_csi2_setup(struct rzg2l_cru_dev *cru, bool *input_is_yuv,
 		break;
 	}
 
+	/* Configure CRU based on type */
 	if (cru->info->cru_type == RZG2L_CRU_TYPE) {
 		icnmc |= (rzg2l_cru_read(cru, ICnMC) & ~ICnMC_INF_MASK);
 		/* Set virtual channel CSI2 */
@@ -388,10 +467,12 @@ static int rzg2l_cru_initialize_image_conv(struct rzg2l_cru_dev *cru,
 {
 	bool output_is_yuv = false;
 	bool input_is_yuv = false;
+	bool input_is_bayer_raw = false;
+	bool output_is_bayer_raw = false;
 	u32 icmc_reg = ICnMC;
-	u32 icndmr;
+	u32 icndmr, icnmc;
 
-	rzg2l_cru_csi2_setup(cru, &input_is_yuv, ip_sd_fmt);
+	rzg2l_cru_csi2_setup(cru, &input_is_yuv, &input_is_bayer_raw, ip_sd_fmt);
 
 	/* Output format */
 	switch (cru->format.pixelformat) {
@@ -451,6 +532,7 @@ static int rzg2l_cru_initialize_image_conv(struct rzg2l_cru_dev *cru,
 	case V4L2_PIX_FMT_SBGGR16:
 		icndmr = 0;
 		output_is_yuv = false;
+		output_is_bayer_raw = true;
 		break;
 	default:
 		dev_err(cru->dev, "Invalid pixelformat (0x%x)\n",
@@ -460,13 +542,71 @@ static int rzg2l_cru_initialize_image_conv(struct rzg2l_cru_dev *cru,
 
 	icmc_reg = (cru->info->cru_type == RZG2L_CRU_TYPE) ? ICnMC : ICnIPMC_C0;
 
-	/* If input and output use same colorspace, do bypass mode */
-	if (output_is_yuv == input_is_yuv)
+	/*
+	 * CRU can perform:
+	 * - Colorspace coversion: YUV <=> RGB.
+	 * - Demosaicing from RAW data to RGB.
+	 * To output YUV color format from RAW data input, we must process
+	 * demosaicing and colorspace conversion.
+	 * Do bypass mode for the remained mode.
+	 */
+	/* Configure colorspace conversion and demosaicing */
+	icnmc = rzg2l_cru_read(cru, icmc_reg);
+	if (output_is_yuv == input_is_yuv && !input_is_bayer_raw && !output_is_bayer_raw) {
+		rzg2l_cru_write(cru, icmc_reg, icnmc | ICnMC_CSCTHR | ICnMC_DEMTHR);
+	} else if ((output_is_yuv && !input_is_yuv && !input_is_bayer_raw) ||
+		   (!output_is_yuv && !output_is_bayer_raw && input_is_yuv)) {
 		rzg2l_cru_write(cru, icmc_reg,
-				rzg2l_cru_read(cru, icmc_reg) | ICnMC_CSCTHR);
-	else
+				(icnmc | ICnMC_DEMTHR) & ~ICnMC_CSCTHR);
+	} else if (input_is_bayer_raw && !output_is_yuv && !output_is_bayer_raw) {
+		rzg2l_cru_write(cru, icmc_reg, icnmc & ~ICnMC_DEMTHR);
+	} else if (input_is_bayer_raw && output_is_yuv) {
 		rzg2l_cru_write(cru, icmc_reg,
-				rzg2l_cru_read(cru, icmc_reg) & (~ICnMC_CSCTHR));
+				icnmc & ~(ICnMC_CSCTHR | ICnMC_DEMTHR));
+	} else if (input_is_bayer_raw && output_is_bayer_raw) {
+		rzg2l_cru_write(cru, icmc_reg, icnmc | ICnMC_CSCTHR | ICnMC_DEMTHR);
+	} else {
+		dev_err(cru->dev, "Unsupported colorspace conversion for pixelformat (0x%x)\n",
+			cru->format.pixelformat);
+		return -ENOEXEC;
+	}
+
+	/* Configure Bayer pattern for demosaicing */
+	if (!(rzg2l_cru_read(cru, icmc_reg) & ICnMC_DEMTHR)) {
+		icnmc = rzg2l_cru_read(cru, icmc_reg) & ~ICnMC_RAWSTTYP_MASK;
+		switch (ip_sd_fmt->code) {
+		case MEDIA_BUS_FMT_SRGGB8_1X8:
+		case MEDIA_BUS_FMT_SRGGB10_1X10:
+		case MEDIA_BUS_FMT_SRGGB12_1X12:
+		case MEDIA_BUS_FMT_SRGGB14_1X14:
+		case MEDIA_BUS_FMT_SRGGB16_1X16:
+			rzg2l_cru_write(cru, icmc_reg, icnmc | ICnMC_RAWSTTYP_RGRG);
+			break;
+		case MEDIA_BUS_FMT_SGRBG8_1X8:
+		case MEDIA_BUS_FMT_SGRBG10_1X10:
+		case MEDIA_BUS_FMT_SGRBG12_1X12:
+		case MEDIA_BUS_FMT_SGRBG14_1X14:
+		case MEDIA_BUS_FMT_SGRBG16_1X16:
+			rzg2l_cru_write(cru, icmc_reg, icnmc | ICnMC_RAWSTTYP_GRGR);
+			break;
+		case MEDIA_BUS_FMT_SGBRG8_1X8:
+		case MEDIA_BUS_FMT_SGBRG10_1X10:
+		case MEDIA_BUS_FMT_SGBRG12_1X12:
+		case MEDIA_BUS_FMT_SGBRG14_1X14:
+		case MEDIA_BUS_FMT_SGBRG16_1X16:
+			rzg2l_cru_write(cru, icmc_reg, icnmc | ICnMC_RAWSTTYP_GBGB);
+			break;
+		case MEDIA_BUS_FMT_SBGGR8_1X8:
+		case MEDIA_BUS_FMT_SBGGR10_1X10:
+		case MEDIA_BUS_FMT_SBGGR12_1X12:
+		case MEDIA_BUS_FMT_SBGGR14_1X14:
+		case MEDIA_BUS_FMT_SBGGR16_1X16:
+			rzg2l_cru_write(cru, icmc_reg, icnmc | ICnMC_RAWSTTYP_BGBG);
+			break;
+		default:
+			break;
+		}
+	}
 
 	/* Set output data format */
 	rzg2l_cru_write(cru, ICnDMR, icndmr);
