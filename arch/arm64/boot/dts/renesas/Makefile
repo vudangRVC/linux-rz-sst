@@ -200,5 +200,27 @@ dtb-$(CONFIG_ARCH_R9A09G077) += r9a09g077m44-rzt2h-evk.dtb
 
 dtb-$(CONFIG_ARCH_R9A09G087) += r9a09g087m44-rzn2h-evk.dtb
 
+dtb-$(CONFIG_ARCH_R9A09G057) += r9a09g057h4-mxt-ar0331.dtb \
+				r9a09g057h4-mxt-imx135.dtb r9a09g057h4-mxt-imx219.dtb \
+				r9a09g057h4-mxt-imx462.dtb r9a09g057h4-mxt-tevs.dtb
+
+r9a09g057h4-mxt-ar0331-emmc-dtbs := r9a09g057h4-mxt-ar0331.dtb rzv2-evk-cn15-emmc.dtbo
+r9a09g057h4-mxt-imx135-emmc-dtbs := r9a09g057h4-mxt-imx135.dtb rzv2-evk-cn15-emmc.dtbo
+r9a09g057h4-mxt-imx219-emmc-dtbs := r9a09g057h4-mxt-imx219.dtb rzv2-evk-cn15-emmc.dtbo
+r9a09g057h4-mxt-imx462-emmc-dtbs := r9a09g057h4-mxt-imx462.dtb rzv2-evk-cn15-emmc.dtbo
+r9a09g057h4-mxt-tevs-emmc-dtbs := r9a09g057h4-mxt-tevs.dtb rzv2-evk-cn15-emmc.dtbo
+dtb-$(CONFIG_ARCH_R9A09G057) += r9a09g057h4-mxt-ar0331-emmc.dtb r9a09g057h4-mxt-tevs-emmc.dtb \
+				r9a09g057h4-mxt-imx135-emmc.dtb r9a09g057h4-mxt-imx219-emmc.dtb \
+				r9a09g057h4-mxt-imx462-emmc.dtb
+
+r9a09g057h4-mxt-ar0331-sd-dtbs := r9a09g057h4-mxt-ar0331.dtb rzv2-evk-cn15-sd.dtbo
+r9a09g057h4-mxt-imx135-sd-dtbs := r9a09g057h4-mxt-imx135.dtb rzv2-evk-cn15-sd.dtbo
+r9a09g057h4-mxt-imx219-sd-dtbs := r9a09g057h4-mxt-imx219.dtb rzv2-evk-cn15-sd.dtbo
+r9a09g057h4-mxt-imx462-sd-dtbs := r9a09g057h4-mxt-imx462.dtb rzv2-evk-cn15-sd.dtbo
+r9a09g057h4-mxt-tevs-sd-dtbs := r9a09g057h4-mxt-tevs.dtb rzv2-evk-cn15-sd.dtbo
+dtb-$(CONFIG_ARCH_R9A09G057) += r9a09g057h4-mxt-ar0331-sd.dtb r9a09g057h4-mxt-imx135-sd.dtb \
+				r9a09g057h4-mxt-imx219-sd.dtb r9a09g057h4-mxt-imx462-sd.dtb \
+				r9a09g057h4-mxt-tevs-sd.dtb
+
 dtb-$(CONFIG_ARCH_RCAR_GEN3) += draak-ebisu-panel-aa104xd12.dtbo
 dtb-$(CONFIG_ARCH_RCAR_GEN3) += salvator-panel-aa104xd12.dtbo
