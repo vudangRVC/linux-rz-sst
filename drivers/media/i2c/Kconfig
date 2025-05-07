@@ -141,6 +141,19 @@ config VIDEO_IMX214
 	  To compile this driver as a module, choose M here: the
 	  module will be called imx214.
 
+config VIDEO_AR0331
+	tristate "Aptina/OnSemi AR0331 sensor support"
+	depends on I2C && VIDEO_DEV
+	select MEDIA_CONTROLLER
+	select VIDEO_V4L2_SUBDEV_API
+	select V4L2_FWNODE
+	help
+	  This is a Video4Linux2 sensor driver for the Aptina/OnSemi
+	  AR0331 camera.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called ar0331.
+
 config VIDEO_IMX219
 	tristate "Sony IMX219 sensor support"
 	select V4L2_CCI_I2C
