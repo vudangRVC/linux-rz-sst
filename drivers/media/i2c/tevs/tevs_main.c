@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 #include "asm-generic/errno-base.h"
 #include "linux/kernel.h"
 #include <linux/clk.h>
@@ -156,113 +157,113 @@
 #define HOST_COMMAND_ISP_CTRL_I2C_ADDR                          (0xF000)
 #define HOST_COMMAND_ISP_CTRL_I2C_DATA                          (0xF002)
 
-#define TEVS_TRIGGER_CTRL                   	HOST_COMMAND_ISP_CTRL_TRIGGER_MODE
+#define TEVS_TRIGGER_CTRL                        HOST_COMMAND_ISP_CTRL_TRIGGER_MODE
 
-#define TEVS_BRIGHTNESS 						HOST_COMMAND_ISP_CTRL_BRIGHTNESS
-#define TEVS_BRIGHTNESS_MAX 					HOST_COMMAND_ISP_CTRL_BRIGHTNESS_MAX
-#define TEVS_BRIGHTNESS_MIN 					HOST_COMMAND_ISP_CTRL_BRIGHTNESS_MIN
-#define TEVS_BRIGHTNESS_MASK 					(0xFFFF)
-#define TEVS_CONTRAST 							HOST_COMMAND_ISP_CTRL_CONTRAST
-#define TEVS_CONTRAST_MAX 						HOST_COMMAND_ISP_CTRL_CONTRAST_MAX
-#define TEVS_CONTRAST_MIN 						HOST_COMMAND_ISP_CTRL_CONTRAST_MIN
-#define TEVS_CONTRAST_MASK 						(0xFFFF)
-#define TEVS_SATURATION 						HOST_COMMAND_ISP_CTRL_SATURATION
-#define TEVS_SATURATION_MAX 					HOST_COMMAND_ISP_CTRL_SATURATION_MAX
-#define TEVS_SATURATION_MIN 					HOST_COMMAND_ISP_CTRL_SATURATION_MIN
-#define TEVS_SATURATION_MASK 					(0xFFFF)
-#define TEVS_AWB_CTRL_MODE 						HOST_COMMAND_ISP_CTRL_AWB_MODE
-#define TEVS_AWB_CTRL_MODE_MASK 				(0x00FF)
-#define TEVS_AWB_CTRL_MODE_MANUAL_TEMP 			(7U << 0)
-#define TEVS_AWB_CTRL_MODE_AUTO 				(15U << 0)
-#define TEVS_AWB_CTRL_MODE_MANUAL_TEMP_IDX 		(0U << 0)
-#define TEVS_AWB_CTRL_MODE_AUTO_IDX 			(1U << 0)
-#define TEVS_GAMMA 								HOST_COMMAND_ISP_CTRL_GAMMA
-#define TEVS_GAMMA_MAX 							HOST_COMMAND_ISP_CTRL_GAMMA_MAX
-#define TEVS_GAMMA_MIN 							HOST_COMMAND_ISP_CTRL_GAMMA_MIN
-#define TEVS_GAMMA_MASK 						(0xFFFF)
-#define TEVS_MAX_FPS							HOST_COMMAND_ISP_CTRL_PREVIEW_MAX_FPS
-#define TEVS_MAX_FPS_MASK 						(0x00FF)
-#define TEVS_AE_AUTO_EXP_TIME_UPPER				HOST_COMMAND_ISP_CTRL_PREVIEW_EXP_TIME_UPPER_MSB
-#define TEVS_AE_AUTO_EXP_TIME_MAX				HOST_COMMAND_ISP_CTRL_PREVIEW_EXP_TIME_MAX_MSB
-#define TEVS_AE_AUTO_EXP_TIME_MASK				(0xFFFFFFFF)
-#define TEVS_AE_MANUAL_EXP_TIME 				HOST_COMMAND_ISP_CTRL_EXP_TIME_MSB
-#define TEVS_AE_MANUAL_EXP_TIME_MAX 			HOST_COMMAND_ISP_CTRL_EXP_TIME_MAX_MSB
-#define TEVS_AE_MANUAL_EXP_TIME_MIN 			HOST_COMMAND_ISP_CTRL_EXP_TIME_MIN_MSB
-#define TEVS_AE_MANUAL_EXP_TIME_MASK 			(0xFFFFFFFF)
-#define TEVS_AE_MANUAL_GAIN 					HOST_COMMAND_ISP_CTRL_EXP_GAIN
-#define TEVS_AE_MANUAL_GAIN_MAX 				HOST_COMMAND_ISP_CTRL_EXP_GAIN_MAX
-#define TEVS_AE_MANUAL_GAIN_MIN 				HOST_COMMAND_ISP_CTRL_EXP_GAIN_MIN
-#define TEVS_AE_MANUAL_GAIN_MASK 				(0x00FF)
-#define TEVS_ORIENTATION 						HOST_COMMAND_ISP_CTRL_FLIP
-#define TEVS_ORIENTATION_HFLIP 					(1U << 0)
-#define TEVS_ORIENTATION_VFLIP 					(1U << 1)
-#define TEVS_FLICK_CTRL    						HOST_COMMAND_ISP_CTRL_FLICK_CTRL
-#define TEVS_FLICK_CTRL_MASK					(0xFFFF) // TEVS_REG_16BIT(0x5440)
-#define TEVS_FLICK_CTRL_FREQ(n)					((n) << 8)
-#define TEVS_FLICK_CTRL_ETC_IHDR_UP				BIT(6)
-#define TEVS_FLICK_CTRL_ETC_DIS					BIT(5)
-#define TEVS_FLICK_CTRL_FRC_OVERRIDE_MAX_ET		BIT(4)
-#define TEVS_FLICK_CTRL_FRC_OVERRIDE_UPPER_ET	BIT(3)
-#define TEVS_FLICK_CTRL_FRC_EN					BIT(2)
-#define TEVS_FLICK_CTRL_MODE_MASK				(3U << 0)
-#define TEVS_FLICK_CTRL_MODE_DISABLED			(0U << 0)
-#define TEVS_FLICK_CTRL_MODE_MANUAL				(1U << 0)
-#define TEVS_FLICK_CTRL_MODE_AUTO				(2U << 0)
-#define TEVS_FLICK_CTRL_FREQ_MASK			    (0xFF00)
-#define TEVS_FLICK_CTRL_MODE_50HZ             	(TEVS_FLICK_CTRL_FREQ(50) | TEVS_FLICK_CTRL_MODE_MANUAL)
-#define TEVS_FLICK_CTRL_MODE_60HZ             	(TEVS_FLICK_CTRL_FREQ(60) | TEVS_FLICK_CTRL_MODE_MANUAL)
-#define TEVS_FLICK_CTRL_MODE_DISABLED_IDX		(0U << 0)
-#define TEVS_FLICK_CTRL_MODE_50HZ_IDX			(1U << 0)
-#define TEVS_FLICK_CTRL_MODE_60HZ_IDX			(2U << 0)
-#define TEVS_FLICK_CTRL_MODE_AUTO_IDX			(3U << 0)
-#define TEVS_AWB_MANUAL_TEMP 					HOST_COMMAND_ISP_CTRL_AWB_TEMP
-#define TEVS_AWB_MANUAL_TEMP_MAX 				HOST_COMMAND_ISP_CTRL_AWB_TEMP_MAX
-#define TEVS_AWB_MANUAL_TEMP_MIN 				HOST_COMMAND_ISP_CTRL_AWB_TEMP_MIN
-#define TEVS_AWB_MANUAL_TEMP_MASK 				(0xFFFF)
-#define TEVS_SHARPEN 							HOST_COMMAND_ISP_CTRL_SHARPEN
-#define TEVS_SHARPEN_MAX 						HOST_COMMAND_ISP_CTRL_SHARPEN_MAX
-#define TEVS_SHARPEN_MIN 						HOST_COMMAND_ISP_CTRL_SHARPEN_MIN
-#define TEVS_SHARPEN_MASK 						(0xFFFF)
-#define TEVS_BACKLIGHT_COMPENSATION 			HOST_COMMAND_ISP_CTRL_BACKLIGHT_COMPENSATION
-#define TEVS_BACKLIGHT_COMPENSATION_MAX 		HOST_COMMAND_ISP_CTRL_BACKLIGHT_COMPENSATION_MAX
-#define TEVS_BACKLIGHT_COMPENSATION_MIN 		HOST_COMMAND_ISP_CTRL_BACKLIGHT_COMPENSATION_MIN
-#define TEVS_BACKLIGHT_COMPENSATION_MASK 		(0xFFFF)
-#define TEVS_DZ_TGT_FCT 						HOST_COMMAND_ISP_CTRL_ZOOM_TIMES
-#define TEVS_DZ_TGT_FCT_MAX 					HOST_COMMAND_ISP_CTRL_ZOOM_TIMES_MAX
-#define TEVS_DZ_TGT_FCT_MIN 					HOST_COMMAND_ISP_CTRL_ZOOM_TIMES_MIN
-#define TEVS_DZ_TGT_FCT_MASK 					(0xFFFF)
-#define TEVS_SFX_MODE 							HOST_COMMAND_ISP_CTRL_EFFECT
-#define TEVS_SFX_MODE_SFX_MASK 					(0x00FF)
-#define TEVS_SFX_MODE_SFX_NORMAL 				(0U << 0)
-#define TEVS_SFX_MODE_SFX_BW 					(3U << 0)
-#define TEVS_SFX_MODE_SFX_GRAYSCALE 			(6U << 0)
-#define TEVS_SFX_MODE_SFX_NEGATIVE 				(7U << 0)
-#define TEVS_SFX_MODE_SFX_SKETCH 				(15U << 0)
-#define TEVS_SFX_MODE_SFX_NORMAL_IDX 			(0U << 0)
-#define TEVS_SFX_MODE_SFX_BW_IDX 				(1U << 0)
-#define TEVS_SFX_MODE_SFX_GRAYSCALE_IDX 		(2U << 0)
-#define TEVS_SFX_MODE_SFX_NEGATIVE_IDX 			(3U << 0)
-#define TEVS_SFX_MODE_SFX_SKETCH_IDX 			(4U << 0)
-#define TEVS_AE_CTRL_MODE 						HOST_COMMAND_ISP_CTRL_AE_MODE
-#define TEVS_AE_CTRL_MODE_MASK 					(0x00FF)
-#define TEVS_AE_CTRL_MANUAL_EXP_TIME_GAIN 		(0U << 0)
-#define TEVS_AE_CTRL_AUTO_GAIN 					(9U << 0)
-#define TEVS_AE_CTRL_FULL_AUTO 					(12U << 0)
-#define TEVS_AE_CTRL_MANUAL_EXP_TIME_GAIN_IDX 	(0U << 0)
-#define TEVS_AE_CTRL_FULL_AUTO_IDX 				(1U << 0)
-#define TEVS_AE_CTRL_AUTO_GAIN_IDX				(2U << 0)
-#define TEVS_DZ_CT_X 							HOST_COMMAND_ISP_CTRL_CT_X
-#define TEVS_DZ_CT_Y 							HOST_COMMAND_ISP_CTRL_CT_Y
-#define TEVS_DZ_CT_MASK 						(0xFFFF)
-#define TEVS_DZ_CT_MAX 							HOST_COMMAND_ISP_CTRL_CT_MAX
-#define TEVS_DZ_CT_MIN 							HOST_COMMAND_ISP_CTRL_CT_MIN
+#define TEVS_BRIGHTNESS                          HOST_COMMAND_ISP_CTRL_BRIGHTNESS
+#define TEVS_BRIGHTNESS_MAX                      HOST_COMMAND_ISP_CTRL_BRIGHTNESS_MAX
+#define TEVS_BRIGHTNESS_MIN                      HOST_COMMAND_ISP_CTRL_BRIGHTNESS_MIN
+#define TEVS_BRIGHTNESS_MASK                     (0xFFFF)
+#define TEVS_CONTRAST                            HOST_COMMAND_ISP_CTRL_CONTRAST
+#define TEVS_CONTRAST_MAX                        HOST_COMMAND_ISP_CTRL_CONTRAST_MAX
+#define TEVS_CONTRAST_MIN                        HOST_COMMAND_ISP_CTRL_CONTRAST_MIN
+#define TEVS_CONTRAST_MASK                       (0xFFFF)
+#define TEVS_SATURATION                          HOST_COMMAND_ISP_CTRL_SATURATION
+#define TEVS_SATURATION_MAX                      HOST_COMMAND_ISP_CTRL_SATURATION_MAX
+#define TEVS_SATURATION_MIN                      HOST_COMMAND_ISP_CTRL_SATURATION_MIN
+#define TEVS_SATURATION_MASK                     (0xFFFF)
+#define TEVS_AWB_CTRL_MODE                       HOST_COMMAND_ISP_CTRL_AWB_MODE
+#define TEVS_AWB_CTRL_MODE_MASK                  (0x00FF)
+#define TEVS_AWB_CTRL_MODE_MANUAL_TEMP           (7U << 0)
+#define TEVS_AWB_CTRL_MODE_AUTO                  (15U << 0)
+#define TEVS_AWB_CTRL_MODE_MANUAL_TEMP_IDX       (0U << 0)
+#define TEVS_AWB_CTRL_MODE_AUTO_IDX              (1U << 0)
+#define TEVS_GAMMA                               HOST_COMMAND_ISP_CTRL_GAMMA
+#define TEVS_GAMMA_MAX                           HOST_COMMAND_ISP_CTRL_GAMMA_MAX
+#define TEVS_GAMMA_MIN                           HOST_COMMAND_ISP_CTRL_GAMMA_MIN
+#define TEVS_GAMMA_MASK                          (0xFFFF)
+#define TEVS_MAX_FPS                             HOST_COMMAND_ISP_CTRL_PREVIEW_MAX_FPS
+#define TEVS_MAX_FPS_MASK                        (0x00FF)
+#define TEVS_AE_AUTO_EXP_TIME_UPPER              HOST_COMMAND_ISP_CTRL_PREVIEW_EXP_TIME_UPPER_MSB
+#define TEVS_AE_AUTO_EXP_TIME_MAX                HOST_COMMAND_ISP_CTRL_PREVIEW_EXP_TIME_MAX_MSB
+#define TEVS_AE_AUTO_EXP_TIME_MASK               (0xFFFFFFFF)
+#define TEVS_AE_MANUAL_EXP_TIME                  HOST_COMMAND_ISP_CTRL_EXP_TIME_MSB
+#define TEVS_AE_MANUAL_EXP_TIME_MAX              HOST_COMMAND_ISP_CTRL_EXP_TIME_MAX_MSB
+#define TEVS_AE_MANUAL_EXP_TIME_MIN              HOST_COMMAND_ISP_CTRL_EXP_TIME_MIN_MSB
+#define TEVS_AE_MANUAL_EXP_TIME_MASK             (0xFFFFFFFF)
+#define TEVS_AE_MANUAL_GAIN                      HOST_COMMAND_ISP_CTRL_EXP_GAIN
+#define TEVS_AE_MANUAL_GAIN_MAX                  HOST_COMMAND_ISP_CTRL_EXP_GAIN_MAX
+#define TEVS_AE_MANUAL_GAIN_MIN                  HOST_COMMAND_ISP_CTRL_EXP_GAIN_MIN
+#define TEVS_AE_MANUAL_GAIN_MASK                 (0x00FF)
+#define TEVS_ORIENTATION                         HOST_COMMAND_ISP_CTRL_FLIP
+#define TEVS_ORIENTATION_HFLIP                   (1U << 0)
+#define TEVS_ORIENTATION_VFLIP                   (1U << 1)
+#define TEVS_FLICK_CTRL                          HOST_COMMAND_ISP_CTRL_FLICK_CTRL
+#define TEVS_FLICK_CTRL_MASK                     (0xFFFF) /* TEVS_REG_16BIT(0x5440) */
+#define TEVS_FLICK_CTRL_FREQ(n)                  ((n) << 8)
+#define TEVS_FLICK_CTRL_ETC_IHDR_UP              BIT(6)
+#define TEVS_FLICK_CTRL_ETC_DIS                  BIT(5)
+#define TEVS_FLICK_CTRL_FRC_OVERRIDE_MAX_ET      BIT(4)
+#define TEVS_FLICK_CTRL_FRC_OVERRIDE_UPPER_ET    BIT(3)
+#define TEVS_FLICK_CTRL_FRC_EN                   BIT(2)
+#define TEVS_FLICK_CTRL_MODE_MASK                (3U << 0)
+#define TEVS_FLICK_CTRL_MODE_DISABLED            (0U << 0)
+#define TEVS_FLICK_CTRL_MODE_MANUAL              (1U << 0)
+#define TEVS_FLICK_CTRL_MODE_AUTO                (2U << 0)
+#define TEVS_FLICK_CTRL_FREQ_MASK                (0xFF00)
+#define TEVS_FLICK_CTRL_MODE_50HZ                (TEVS_FLICK_CTRL_FREQ(50) | TEVS_FLICK_CTRL_MODE_MANUAL)
+#define TEVS_FLICK_CTRL_MODE_60HZ                (TEVS_FLICK_CTRL_FREQ(60) | TEVS_FLICK_CTRL_MODE_MANUAL)
+#define TEVS_FLICK_CTRL_MODE_DISABLED_IDX        (0U << 0)
+#define TEVS_FLICK_CTRL_MODE_50HZ_IDX            (1U << 0)
+#define TEVS_FLICK_CTRL_MODE_60HZ_IDX            (2U << 0)
+#define TEVS_FLICK_CTRL_MODE_AUTO_IDX            (3U << 0)
+#define TEVS_AWB_MANUAL_TEMP                     HOST_COMMAND_ISP_CTRL_AWB_TEMP
+#define TEVS_AWB_MANUAL_TEMP_MAX                 HOST_COMMAND_ISP_CTRL_AWB_TEMP_MAX
+#define TEVS_AWB_MANUAL_TEMP_MIN                 HOST_COMMAND_ISP_CTRL_AWB_TEMP_MIN
+#define TEVS_AWB_MANUAL_TEMP_MASK                (0xFFFF)
+#define TEVS_SHARPEN                             HOST_COMMAND_ISP_CTRL_SHARPEN
+#define TEVS_SHARPEN_MAX                         HOST_COMMAND_ISP_CTRL_SHARPEN_MAX
+#define TEVS_SHARPEN_MIN                         HOST_COMMAND_ISP_CTRL_SHARPEN_MIN
+#define TEVS_SHARPEN_MASK                        (0xFFFF)
+#define TEVS_BACKLIGHT_COMPENSATION              HOST_COMMAND_ISP_CTRL_BACKLIGHT_COMPENSATION
+#define TEVS_BACKLIGHT_COMPENSATION_MAX          HOST_COMMAND_ISP_CTRL_BACKLIGHT_COMPENSATION_MAX
+#define TEVS_BACKLIGHT_COMPENSATION_MIN          HOST_COMMAND_ISP_CTRL_BACKLIGHT_COMPENSATION_MIN
+#define TEVS_BACKLIGHT_COMPENSATION_MASK         (0xFFFF)
+#define TEVS_DZ_TGT_FCT                          HOST_COMMAND_ISP_CTRL_ZOOM_TIMES
+#define TEVS_DZ_TGT_FCT_MAX                      HOST_COMMAND_ISP_CTRL_ZOOM_TIMES_MAX
+#define TEVS_DZ_TGT_FCT_MIN                      HOST_COMMAND_ISP_CTRL_ZOOM_TIMES_MIN
+#define TEVS_DZ_TGT_FCT_MASK                     (0xFFFF)
+#define TEVS_SFX_MODE                            HOST_COMMAND_ISP_CTRL_EFFECT
+#define TEVS_SFX_MODE_SFX_MASK                   (0x00FF)
+#define TEVS_SFX_MODE_SFX_NORMAL                 (0U << 0)
+#define TEVS_SFX_MODE_SFX_BW                     (3U << 0)
+#define TEVS_SFX_MODE_SFX_GRAYSCALE              (6U << 0)
+#define TEVS_SFX_MODE_SFX_NEGATIVE               (7U << 0)
+#define TEVS_SFX_MODE_SFX_SKETCH                 (15U << 0)
+#define TEVS_SFX_MODE_SFX_NORMAL_IDX             (0U << 0)
+#define TEVS_SFX_MODE_SFX_BW_IDX                 (1U << 0)
+#define TEVS_SFX_MODE_SFX_GRAYSCALE_IDX          (2U << 0)
+#define TEVS_SFX_MODE_SFX_NEGATIVE_IDX           (3U << 0)
+#define TEVS_SFX_MODE_SFX_SKETCH_IDX             (4U << 0)
+#define TEVS_AE_CTRL_MODE                        HOST_COMMAND_ISP_CTRL_AE_MODE
+#define TEVS_AE_CTRL_MODE_MASK                   (0x00FF)
+#define TEVS_AE_CTRL_MANUAL_EXP_TIME_GAIN        (0U << 0)
+#define TEVS_AE_CTRL_AUTO_GAIN                   (9U << 0)
+#define TEVS_AE_CTRL_FULL_AUTO                   (12U << 0)
+#define TEVS_AE_CTRL_MANUAL_EXP_TIME_GAIN_IDX    (0U << 0)
+#define TEVS_AE_CTRL_FULL_AUTO_IDX               (1U << 0)
+#define TEVS_AE_CTRL_AUTO_GAIN_IDX               (2U << 0)
+#define TEVS_DZ_CT_X                             HOST_COMMAND_ISP_CTRL_CT_X
+#define TEVS_DZ_CT_Y                             HOST_COMMAND_ISP_CTRL_CT_Y
+#define TEVS_DZ_CT_MASK                          (0xFFFF)
+#define TEVS_DZ_CT_MAX                           HOST_COMMAND_ISP_CTRL_CT_MAX
+#define TEVS_DZ_CT_MIN                           HOST_COMMAND_ISP_CTRL_CT_MIN
 
 #define V4L2_CID_USER_TEVS_BASE				(V4L2_CID_USER_BASE + 0x2000)
 #define V4L2_CID_TEVS_BSL_MODE				(V4L2_CID_USER_TEVS_BASE + 0)
 #define V4L2_CID_TEVS_MAX_FPS				(V4L2_CID_USER_TEVS_BASE + 1)
-#define TEVS_TRIGGER_CTRL_MODE_MASK 		(0x0001)
-#define TEVS_BSL_MODE_NORMAL_IDX 		    (0U << 0)
-#define TEVS_BSL_MODE_FLASH_IDX 			(1U << 0)
+#define TEVS_TRIGGER_CTRL_MODE_MASK			(0x0001)
+#define TEVS_BSL_MODE_NORMAL_IDX		    (0U << 0)
+#define TEVS_BSL_MODE_FLASH_IDX				(1U << 0)
 
 #define DEFAULT_HEADER_VERSION 3
 #define TEVS_BOOT_TIME						(250)
@@ -301,7 +302,7 @@ struct header_info {
 	u32 content_len;
 	u16 content_checksum;
 	u16 total_checksum;
-} __attribute__((packed));
+} __packed;
 
 struct tevs {
 	struct v4l2_subdev v4l2_subdev;
@@ -381,10 +382,11 @@ int tevs_i2c_read_16b(struct tevs *tevs, u16 reg, u16 *value)
 	u8 v[2] = { 0 };
 	int ret;
 
-	if ((ret = tevs_i2c_read(tevs, reg, v, 2)) != 0)
+	ret = tevs_i2c_read(tevs, reg, v, 2);
+	if (ret != 0)
 		return ret;
 
-	*value = (v[0] << 8) | v[1];
+	*value = (u16)((v[0] << 8) | v[1]);
 	dev_dbg(&client->dev, "%s() read reg 0x%x, value 0x%x\n", __func__, reg,
 		*value);
 
@@ -412,10 +414,12 @@ int tevs_i2c_write_16b(struct tevs *tevs, u16 reg, u16 val)
 	struct i2c_client *client = v4l2_get_subdevdata(&tevs->v4l2_subdev);
 	int ret;
 	u8 data[2];
+
 	data[0] = val >> 8;
 	data[1] = val & 0xFF;
 
-	if ((ret = regmap_bulk_write(tevs->regmap, reg, data, 2)) != 0)
+	ret = regmap_bulk_write(tevs->regmap, reg, data, 2);
+	if (ret != 0)
 		return ret;
 
 	dev_dbg(&client->dev, "%s() write reg 0x%x, value 0x%x\n", __func__,
@@ -430,16 +434,17 @@ int tevs_enable_trigger_mode(struct tevs *tevs, int enable)
 	int ret = 0;
 	int count = 0;
 	u16 val, trigger_data;
+
 	dev_dbg(&client->dev, "%s(): enable:%d\n", __func__, enable);
 	trigger_data = (0x300 | ((enable > 0) ? 0x82 : 0x80));
 
-	if ((ret = tevs_i2c_write_16b(tevs, TEVS_TRIGGER_CTRL, trigger_data)) <
-	    0)
+	ret = tevs_i2c_write_16b(tevs, TEVS_TRIGGER_CTRL, trigger_data);
+	if (ret < 0)
 		return ret;
 
 	do {
-		if ((ret = tevs_i2c_read_16b(tevs, TEVS_TRIGGER_CTRL, &val)) <
-		    0)
+		ret = tevs_i2c_read_16b(tevs, TEVS_TRIGGER_CTRL, &val);
+		if (ret < 0)
 			return ret;
 		if ((val & 0x300) == 0)
 			break;
@@ -510,6 +515,7 @@ static int tevs_standby(struct tevs *tevs, int enable)
 	struct i2c_client *client = v4l2_get_subdevdata(&tevs->v4l2_subdev);
 	u16 v = 0xFFFF;
 	int timeout = 0;
+
 	dev_dbg(&client->dev, "%s():enable=%d\n", __func__, enable);
 
 	if (enable == 1) {
@@ -581,11 +587,10 @@ static int tevs_start_streaming(struct tevs *tevs)
 	u8 exp[4] = { 0 };
 
 	ret = pm_runtime_resume_and_get(&client->dev);
-	if (ret < 0) {
+	if (ret < 0)
 		goto err_rpm_put;
-	}
 
-	if (!(tevs->hw_reset_mode | tevs->trigger_mode))
+	if (!tevs->hw_reset_mode && !tevs->trigger_mode)
 		ret = tevs_standby(tevs, 0);
 	if (ret == 0) {
 		int fps = tevs_sensor_table[tevs->selected_sensor]
@@ -643,7 +648,7 @@ static void tevs_stop_streaming(struct tevs *tevs)
 	int ret = 0;
 
 	/* set stream off register */
-	if (!(tevs->hw_reset_mode | tevs->trigger_mode)) {
+	if (!tevs->hw_reset_mode && !tevs->trigger_mode) {
 		ret = tevs_standby(tevs, 1);
 		if (ret)
 			dev_err(&client->dev, "%s failed to set stream\n",
@@ -673,9 +678,8 @@ static int tevs_power_on(struct device *dev)
 	msleep(TEVS_BOOT_TIME);
 
 	ret = tevs_check_boot_state(tevs);
-	if (ret != 0) {
+	if (ret != 0)
 		goto error;
-	}
 
 	if (tevs->trigger_mode) {
 		ret = tevs_enable_trigger_mode(tevs, 1);
@@ -767,6 +771,7 @@ static int tevs_get_frame_interval(struct v4l2_subdev *sub_dev,
 {
 	struct tevs *tevs = container_of(sub_dev, struct tevs, v4l2_subdev);
 	u32 max_fps;
+
 	dev_dbg(sub_dev->dev, "%s()\n", __func__);
 
 	if (fi->pad != 0)
@@ -788,6 +793,7 @@ static int tevs_set_frame_interval(struct v4l2_subdev *sub_dev,
 {
 	struct tevs *tevs = container_of(sub_dev, struct tevs, v4l2_subdev);
 	u32 max_fps;
+
 	dev_dbg(sub_dev->dev, "%s()\n", __func__);
 
 	if (fi->pad != 0)
@@ -840,6 +846,7 @@ static int tevs_enum_mbus_code(struct v4l2_subdev *sub_dev,
 			       struct v4l2_subdev_mbus_code_enum *code)
 {
 	struct tevs *tevs = to_tevs(sub_dev);
+
 	dev_dbg(sub_dev->dev, "%s() index [%u]\n", __func__, code->index);
 	if (code->pad || code->index > 0)
 		return -EINVAL;
@@ -908,9 +915,9 @@ static int tevs_set_fmt(struct v4l2_subdev *sub_dev,
 			break;
 	}
 
-	if (i >= tevs_sensor_table[tevs->selected_sensor].res_list_size) {
+	if (i >= tevs_sensor_table[tevs->selected_sensor].res_list_size)
 		return -EINVAL;
-	}
+
 	tevs->selected_mode = i;
 	dev_dbg(sub_dev->dev, "%s() selected mode index [%d]\n", __func__,
 		tevs->selected_mode);
@@ -946,6 +953,7 @@ static int tevs_get_selection(struct v4l2_subdev *sub_dev,
 			      struct v4l2_subdev_selection *sel)
 {
 	struct tevs *tevs = to_tevs(sub_dev);
+
 	switch (sel->target) {
 	case V4L2_SEL_TGT_CROP:
 	case V4L2_SEL_TGT_NATIVE_SIZE:
@@ -1200,6 +1208,7 @@ static int tevs_set_vflip(struct tevs *tevs, s32 flip)
 static int tevs_set_flick_mode(struct tevs *tevs, s32 mode)
 {
 	u16 val = 0;
+
 	switch (mode) {
 	case TEVS_FLICK_CTRL_MODE_DISABLED_IDX:
 		val = TEVS_FLICK_CTRL_MODE_DISABLED;
@@ -1325,6 +1334,7 @@ static int tevs_set_bsl_mode(struct tevs *tevs, s32 mode)
 	u8 bootcmd[6] = { 0x00, 0x12, 0x3A, 0x61, 0x44, 0xDE };
 	u8 startup[6] = { 0x00, 0x40, 0xE2, 0x51, 0x21, 0x5B };
 	u16 data_freq_tmp;
+
 	dev_dbg(&client->dev, "%s(): set bls mode: %d", __func__, mode);
 
 	switch (mode) {
@@ -1381,6 +1391,7 @@ static int tevs_set_max_fps(struct tevs *tevs, s32 value)
 {
 	u8 exp[4] = { 0 };
 	int ret = 0;
+
 	ret += tevs_i2c_write_16b(tevs, TEVS_MAX_FPS,
 				  value & TEVS_MAX_FPS_MASK);
 	ret += tevs_i2c_read(tevs, TEVS_AE_MANUAL_EXP_TIME, exp, 4);
@@ -1775,6 +1786,7 @@ static int tevs_ctrls_init(struct tevs *tevs)
 		break;
 	case TEVS_AE_CTRL_AUTO_GAIN: {
 		u8 exp[4] = { 0 };
+
 		ret += tevs_i2c_read(tevs, TEVS_AE_MANUAL_EXP_TIME, exp, 4);
 		tevs->exp_time->cur.val = be32_to_cpup((__be32 *)exp) &
 					  TEVS_AE_MANUAL_EXP_TIME_MASK;
@@ -1912,6 +1924,7 @@ static int tevs_check_hwcfg(struct device *dev)
 	struct v4l2_subdev *sub_dev = i2c_get_clientdata(client);
 	struct tevs *tevs = to_tevs(sub_dev);
 	int ret = 0;
+
 	tevs->reset_gpio =
 		devm_gpiod_get_optional(dev, "VANA-supply", GPIOD_OUT_HIGH);
 	if (IS_ERR(tevs->reset_gpio)) {
@@ -2060,7 +2073,7 @@ static int tevs_probe(struct i2c_client *client)
 	}
 
 	if (i >= ARRAY_SIZE(tevs_sensor_table)) {
-		dev_err(dev, "can not not support the product: %s\n",
+		dev_err(dev, "can not support the product: %s\n",
 			(const char *)tevs->header_info->product_name);
 		ret = -EINVAL;
 		goto error_power_off;

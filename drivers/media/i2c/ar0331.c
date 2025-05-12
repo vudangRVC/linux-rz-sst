@@ -698,11 +698,13 @@ static int ar0331_read_reg(struct ar0331 *ar0331, u16 reg, u32 len, u32 *val)
 
 	if (len == 2) {
 		u8 buf[2];
+
 		ret = regmap_raw_read(ar0331->regmap, reg, buf, sizeof(buf));
 		if (ret == 0)
 			*val = (u16)buf[0] << 8 | buf[1];
 	} else if (len == 1) {
 		u32 _val;
+
 		ret = regmap_read(ar0331->regmap, reg, &_val);
 		if (ret == 0)
 			*val = _val & 0xFF;

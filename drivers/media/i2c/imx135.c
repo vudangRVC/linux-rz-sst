@@ -9,60 +9,60 @@
  */
 
 /*
-  This driver was written based on imx219, so the basic structure (of this driver)
-  should be the same, but it could be that some controls don't work well.
-
-  These are known to work fine (values are for example):
-        v4l2-ctl --set-ctrl=digital_gain=4
-        v4l2-ctl --set-ctrl=analogue_gain=140
-        v4l2-ctl --set-ctrl=exposure=3000
-  They can be adjusted in imx135_set_ctrl().
-
-  The Digital Gain for imx135 and some regs, is interesting.
-  It seems that there are 2 regs for each R,G,B.
-  So, the base values are represented as imx135_digital_gain_base_reg_values[].
-  The default base values, seem to give a good white-balance.
-  But may need more tuning.
-
-  Some of the register set that works here is an adaptation from this kernel:
-    https://android.googlesource.com/kernel/tegra/+/2268683075e741190919217a72fcf13eb174dc57/drivers/media/platform/tegra/imx135.c
-  For 1280x720, the register set (in the tegra imx135 driver) is 'static struct imx135_reg mode_1280x720[]' or '720p 30fps'
-  The adjustments that were done are:
-      {0x0108, 0x03}   ->  {0x0108, 0x01}   (From 4 Lanes to 2 Lanes)
-      {0x0309, 0x05}   ->  {0x0309, 0x0A}   (2x on a PLL divider)
-  The inspiration for this conversion came from diff-ing
-      https://github.com/ArduCAM/ArduCAM_USB_Camera_Shield/blob/master/ROS/arducam_usb2_ros/camera_config_files/IMX135_MIPI_4L_13MP.cfg
-      https://github.com/ArduCAM/ArduCAM_USB_Camera_Shield/blob/master/ROS/arducam_usb2_ros/camera_config_files/IMX135_MIPI_2L_13MP.cfg
-
-
-  For 1920x1080, register set (in the tegra imx135 driver) is 'static struct imx135_reg mode_1920x1080[]'
-  The adjustments that were done are:
-      {0x0108, 0x03}   ->  {0x0108, 0x01}   (From 4 Lanes to 2 Lanes)
-      {0x0309, 0x05}   ->  {0x0309, 0x0A}   (2x on a PLL divider)
-
-  The inspiration for the changes below, came from trying out different combinations found here:
-      https://github.com/torvalds/linux/blob/ef674997e49760137ca9a90aac41a9922ac399b2/drivers/staging/media/atomisp/i2c/imx/imx135.h#L2854
-
-      {0x0340, 0x0A},  ->  {0x0340, 0x04},  (These 2 registers are the number of lines per frame)
-      {0x0341, 0x40},  ->  {0x0341, 0xCA},  So, 2624 -> 1226
-
-      {0x0342, 0x11},  -> {0x0342, 0x23},   (These 2 registers are the pixels_per_line)
-      {0x0343, 0xDC},  -> {0x0343, 0xB8},   So, 4572 -> 9144
-
-
-  For 2104x1560, register set is from:
-     https://github.com/ArduCAM/ArduCAM_USB_Camera_Shield/blob/master/ROS/arducam_usb2_ros/camera_config_files/IMX135_MIPI_4L_3MP.cfg  
-  The adjustments that were done are:
-      {0x0108, 0x03}   ->  {0x0108, 0x01}   (From 4 Lanes to 2 Lanes)
-      {0x0309, 0x05}   ->  {0x0309, 0x0A}   (2x on a PLL divider)
-
-  For some details about what some other registers mean, this can be reviewed:
-    https://github.com/torvalds/linux/blob/ef674997e49760137ca9a90aac41a9922ac399b2/drivers/staging/media/atomisp/i2c/imx/imx135.h#L667
-  Some of the registers have comments about what they are/mean, but especially for the
-  size-setting registers, the correlation between some of the sizes is not clear.
-
-  This suggests that a tool from Sony generates the register sets, based on desired configuration.
-
+ * This driver was written based on imx219, so the basic structure (of this driver)
+ * should be the same, but it could be that some controls don't work well.
+ *
+ * These are known to work fine (values are for example):
+ *		v4l2-ctl --set-ctrl=digital_gain=4
+ *		v4l2-ctl --set-ctrl=analogue_gain=140
+ *		v4l2-ctl --set-ctrl=exposure=3000
+ * They can be adjusted in imx135_set_ctrl().
+ *
+ * The Digital Gain for imx135 and some regs, is interesting.
+ * It seems that there are 2 regs for each R,G,B.
+ * So, the base values are represented as imx135_digital_gain_base_reg_values[].
+ * The default base values, seem to give a good white-balance.
+ * But may need more tuning.
+ *
+ * Some of the register set that works here is an adaptation from this kernel:
+ *   https://android.googlesource.com/kernel/tegra/+/2268683075e741190919217a72fcf13eb174dc57/drivers/media/platform/tegra/imx135.c
+ * For 1280x720, the register set (in the tegra imx135 driver) is 'static struct imx135_reg mode_1280x720[]' or '720p 30fps'
+ * The adjustments that were done are:
+ *     {0x0108, 0x03}   ->  {0x0108, 0x01}   (From 4 Lanes to 2 Lanes)
+ *     {0x0309, 0x05}   ->  {0x0309, 0x0A}   (2x on a PLL divider)
+ * The inspiration for this conversion came from diff-ing
+ *     https://github.com/ArduCAM/ArduCAM_USB_Camera_Shield/blob/master/ROS/arducam_usb2_ros/camera_config_files/IMX135_MIPI_4L_13MP.cfg
+ *     https://github.com/ArduCAM/ArduCAM_USB_Camera_Shield/blob/master/ROS/arducam_usb2_ros/camera_config_files/IMX135_MIPI_2L_13MP.cfg
+ *
+ *
+ * For 1920x1080, register set (in the tegra imx135 driver) is 'static struct imx135_reg mode_1920x1080[]'
+ * The adjustments that were done are:
+ *     {0x0108, 0x03}   ->  {0x0108, 0x01}   (From 4 Lanes to 2 Lanes)
+ *     {0x0309, 0x05}   ->  {0x0309, 0x0A}   (2x on a PLL divider)
+ *
+ * The inspiration for the changes below, came from trying out different combinations found here:
+ *     https://github.com/torvalds/linux/blob/ef674997e49760137ca9a90aac41a9922ac399b2/drivers/staging/media/atomisp/i2c/imx/imx135.h#L2854
+ *
+ *     {0x0340, 0x0A},  ->  {0x0340, 0x04},  (These 2 registers are the number of lines per frame)
+ *     {0x0341, 0x40},  ->  {0x0341, 0xCA},  So, 2624 -> 1226
+ *
+ *     {0x0342, 0x11},  -> {0x0342, 0x23},   (These 2 registers are the pixels_per_line)
+ *     {0x0343, 0xDC},  -> {0x0343, 0xB8},   So, 4572 -> 9144
+ *
+ *
+ * For 2104x1560, register set is from:
+ *    https://github.com/ArduCAM/ArduCAM_USB_Camera_Shield/blob/master/ROS/arducam_usb2_ros/camera_config_files/IMX135_MIPI_4L_3MP.cfg
+ * The adjustments that were done are:
+ *     {0x0108, 0x03}   ->  {0x0108, 0x01}   (From 4 Lanes to 2 Lanes)
+ *     {0x0309, 0x05}   ->  {0x0309, 0x0A}   (2x on a PLL divider)
+ *
+ * For some details about what some other registers mean, this can be reviewed:
+ *   https://github.com/torvalds/linux/blob/ef674997e49760137ca9a90aac41a9922ac399b2/drivers/staging/media/atomisp/i2c/imx/imx135.h#L667
+ * Some of the registers have comments about what they are/mean, but especially for the
+ * size-setting registers, the correlation between some of the sizes is not clear.
+ *
+ * This suggests that a tool from Sony generates the register sets, based on desired configuration.
+ *
  */
 
 
@@ -1022,6 +1022,7 @@ static int imx135_set_ctrl(struct v4l2_ctrl *ctrl)
 		/* IMX135 (and similar parts) have 8 Digital Gain Registers */
 		for (i = 0; i < 8; i++) {
 			u32 val = imx135_digital_gain_base_reg_values[i];
+
 			pr_err("%s %d reg %04x val %02x\n", __func__, __LINE__, IMX135_REG_DIGITAL_GAIN + i, val);
 			val *= ctrl->val;
 			ret |= imx135_write_reg(imx135,

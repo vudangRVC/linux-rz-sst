@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 #ifndef __SENSOR_TABLES_H__
 #define __SENSOR_TABLES_H__
 
@@ -111,4 +112,4 @@ static struct sensor_info tevs_sensor_table[] = {
 	  .res_list_size = ARRAY_SIZE(ar1335_res_list) },
 };
 
-#endif //__SENSOR_TABLES_H__
+#endif /* __SENSOR_TABLES_H__ */

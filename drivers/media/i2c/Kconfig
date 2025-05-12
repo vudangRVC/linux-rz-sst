@@ -731,7 +731,7 @@ config VIDEO_ARDUCAM_PIVARIETY
 	help
 	  This is a Video4Linux2 sensor driver for the Arducam
 	  Pivariety camera series.
-  
+
 	  To compile this driver as a module, choose M here: the
 	  module will be called arducam-pivariety.
 
