@@ -3265,7 +3265,6 @@ F:	arch/arm/configs/shmobile_defconfig
 F:	arch/arm/include/debug/renesas-scif.S
 F:	arch/arm/mach-shmobile/
 F:	arch/arm64/boot/dts/renesas/
-F:	arch/arm64/configs/rzpi_defconfig
 F:	arch/riscv/boot/dts/renesas/
 F:	drivers/pmdomain/renesas/
 F:	drivers/soc/renesas/
@@ -3713,8 +3712,6 @@ F:	drivers/virt/coco/arm-cca-guest/
 F:	drivers/virt/coco/pkvm-guest/
 F:	tools/testing/selftests/arm64/
 X:	arch/arm64/boot/dts/
-X:	arch/arm64/configs/defconfig
-X:	arch/arm64/configs/rzpi_defconfig
 
 ARROW SPEEDCHIPS XRS7000 SERIES ETHERNET SWITCH DRIVER
 M:	George McCollister <george.mccollister@gmail.com>
