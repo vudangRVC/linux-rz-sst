@@ -524,7 +524,7 @@ static int pci_endpoint_test_copy(struct pci_endpoint_test *test,
 		return -EINVAL;
 	}
 
-	orig_src_addr = kzalloc(size + alignment, GFP_KERNEL);
+	orig_src_addr = kzalloc(size + alignment, GFP_KERNEL | GFP_DMA);
 	if (!orig_src_addr) {
 		dev_err(dev, "Failed to allocate source buffer\n");
 		return -ENOMEM;
@@ -556,7 +556,7 @@ static int pci_endpoint_test_copy(struct pci_endpoint_test *test,
 
 	src_crc32 = crc32_le(~0, src_addr, size);
 
-	orig_dst_addr = kzalloc(size + alignment, GFP_KERNEL);
+	orig_dst_addr = kzalloc(size + alignment, GFP_KERNEL | GFP_DMA);
 	if (!orig_dst_addr) {
 		dev_err(dev, "Failed to allocate destination address\n");
 		ret = -ENOMEM;
@@ -657,7 +657,7 @@ static int pci_endpoint_test_write(struct pci_endpoint_test *test,
 		return -EINVAL;
 	}
 
-	orig_addr = kzalloc(size + alignment, GFP_KERNEL);
+	orig_addr = kzalloc(size + alignment, GFP_KERNEL | GFP_DMA);
 	if (!orig_addr) {
 		dev_err(dev, "Failed to allocate address\n");
 		return -ENOMEM;
@@ -754,7 +754,7 @@ static int pci_endpoint_test_read(struct pci_endpoint_test *test,
 		return -EINVAL;
 	}
 
-	orig_addr = kzalloc(size + alignment, GFP_KERNEL);
+	orig_addr = kzalloc(size + alignment, GFP_KERNEL | GFP_DMA);
 	if (!orig_addr) {
 		dev_err(dev, "Failed to allocate destination address\n");
 		return -ENOMEM;
