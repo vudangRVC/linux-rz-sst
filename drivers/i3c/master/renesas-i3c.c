@@ -250,6 +250,7 @@ struct renesas_i3c_xferqueue {
 };
 
 struct renesas_i3c {
+	struct device *dev;
 	struct i3c_master_controller base;
 	enum i3c_internal_state internal_state;
 	u16 maxdevs;
@@ -609,6 +610,10 @@ static int renesas_i3c_bus_init(struct i3c_master_controller *m)
 
 	memset(&info, 0, sizeof(info));
 	info.dyn_addr = ret;
+
+	dev_info(i3c->dev, "register with i2c-scl = %ldHz i3c-scl = %ldHz\n",
+		 (unsigned long)bus->scl_rate.i2c,
+		 (unsigned long)bus->scl_rate.i3c);
 	return i3c_master_set_info(&i3c->base, &info);
 }
 
@@ -1363,6 +1368,7 @@ static int renesas_i3c_probe(struct platform_device *pdev)
 
 	i3c->maxdevs = RENESAS_I3C_MAX_DEVS;
 	i3c->free_pos = GENMASK(i3c->maxdevs - 1, 0);
+	i3c->dev = &pdev->dev;
 
 	return i3c_master_register(&i3c->base, &pdev->dev, &renesas_i3c_ops, false);
 }
