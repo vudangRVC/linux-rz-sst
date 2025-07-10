@@ -718,8 +718,11 @@ static int rzg2l_mipi_dsi_startup(struct rzg2l_mipi_dsi *dsi,
 	* hsclk(bit) = hsclk(byte) * 8
 	*/
 	bpp = mipi_dsi_pixel_format_to_bpp(dsi->format);
-	hsfreq = (mode->clock * bpp * 8) / (8 * dsi->lanes);
-
+	if (dsi->info->type == MIPI_DSI_DPHY_RZV2H) {
+		hsfreq = DIV_ROUND_CLOSEST_ULL(vclk_rate * bpp * 8, 8 * dsi->lanes);
+	} else {
+		hsfreq = (mode->clock * bpp * 8) / (8 * dsi->lanes);
+	}
 	ret = pm_runtime_resume_and_get(dsi->dev);
 	if (ret < 0)
 		return ret;
