@@ -276,9 +276,9 @@ static unsigned long rzv2h_cpg_pll_div_recalc_rate(struct clk_hw *hw,
 						unsigned long parent_rate)
 {
 	struct rzv2h_pll_div_hw_data *pll_div = to_rzv2h_pll_div_hw_data(hw);
-	unsigned long long rate;
+	unsigned long long int rate;
 
-	rate = (unsigned long long) parent_rate * pll_div->mult;
+	rate = (unsigned long long int) parent_rate * pll_div->mult;
 	do_div(rate, pll_div->div);
 
 	return (unsigned long)rate;
