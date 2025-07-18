@@ -244,6 +244,14 @@ static const struct rzg2l_csi2_format rzg2l_csi2_formats[] = {
 	{ .code = MEDIA_BUS_FMT_SGBRG14_1X14, .bpp = 14, },
 	{ .code = MEDIA_BUS_FMT_SGRBG14_1X14, .bpp = 14, },
 	{ .code = MEDIA_BUS_FMT_SRGGB14_1X14, .bpp = 14, },
+	{ .code = MEDIA_BUS_FMT_YUYV8_1X16,	.bpp = 16 },
+	{ .code = MEDIA_BUS_FMT_RGB565_2X8_LE,	.bpp = 16 },
+	{ .code = MEDIA_BUS_FMT_YUYV10_2X10,	.bpp = 20 },
+	{ .code = MEDIA_BUS_FMT_RGB888_1X24,	.bpp = 24 },
+	{ .code = MEDIA_BUS_FMT_SRGGB16_1X16,	.bpp = 16 },
+	{ .code = MEDIA_BUS_FMT_SGRBG16_1X16,	.bpp = 16 },
+	{ .code = MEDIA_BUS_FMT_SGBRG16_1X16,	.bpp = 16 },
+	{ .code = MEDIA_BUS_FMT_SBGGR16_1X16,	.bpp = 16 },
 };
 
 static inline struct rzg2l_csi2 *sd_to_csi2(struct v4l2_subdev *sd)
@@ -928,6 +936,8 @@ static int rzg2l_csi2_probe(struct platform_device *pdev)
 
 	csi2->dev = dev;
 
+	csi2->info = of_device_get_match_data(&pdev->dev);
+
 	platform_set_drvdata(pdev, csi2);
 
 	ret = rzg2l_csi2_parse_dt(csi2);
@@ -1017,6 +1027,7 @@ static int rzg2l_csi2_pm_runtime_resume(struct device *dev)
 static const struct dev_pm_ops rzg2l_csi2_pm_ops = {
 	RUNTIME_PM_OPS(rzg2l_csi2_pm_runtime_suspend,
 		       rzg2l_csi2_pm_runtime_resume, NULL)
+	SET_SYSTEM_SLEEP_PM_OPS(pm_runtime_force_suspend, pm_runtime_force_resume)
 };
 
 static const struct of_device_id rzg2l_csi2_of_table[] = {
@@ -1027,6 +1038,10 @@ static const struct of_device_id rzg2l_csi2_of_table[] = {
 	{
 		.compatible = "renesas,rzg2l-csi2",
 		.data = &rzg2l_csi2_info,
+	},
+	{
+		.compatible = "renesas,rzg3e-csi2",
+		.data = &rzv2h_csi2_info,
 	},
 	{ /* sentinel */ }
 };

@@ -12,9 +12,21 @@
 #include <linux/reset.h>
 
 #include <media/v4l2-async.h>
+#include <media/v4l2-ctrls.h>
 #include <media/v4l2-dev.h>
 #include <media/v4l2-device.h>
 #include <media/videobuf2-v4l2.h>
+
+#define CONNECTION_TIME 2000
+#define SETUP_WAIT_TIME 3000
+
+enum rz_cru_type {
+	RZG2L_CRU_TYPE,
+	RZV2H_CRU_TYPE,
+};
+
+#define RZG2L_CRU_MAX			4
+
 
 /* Number of HW buffers */
 #define RZG2L_CRU_HW_BUFFER_MAX		8
@@ -35,6 +47,38 @@ enum rzg2l_csi2_pads {
 };
 
 struct rzg2l_cru_dev;
+
+/*
+ * The base for the RZ/G2L CRU driver controls.
+ * We reserve 16 controls for this driver
+ * The last USER-class private control IDs is V4L2_CID_USER_ATMEL_ISC_BASE.
+ */
+
+#define V4L2_CID_USER_CRU_BASE	(V4L2_CID_USER_BASE + 0x10e0)
+
+/* V4L2 private controls */
+#define V4L2_CID_CRU_FRAME_SKIP	(V4L2_CID_USER_CRU_BASE + 0)
+
+#define V4L2_CID_CRU_LIMIT	1
+
+static const struct v4l2_ctrl_ops rzg2l_cru_ctrl_ops;
+
+static const struct v4l2_ctrl_config rzg2l_cru_ctrls[V4L2_CID_CRU_LIMIT] = {
+	{
+		.id = V4L2_CID_CRU_FRAME_SKIP,
+		.type = V4L2_CTRL_TYPE_BOOLEAN,
+		.ops = &rzg2l_cru_ctrl_ops,
+		.name = "Skipping Frames Enable/Disable",
+		.max = 1,
+		.min = 0,
+		.step = 1,
+		.def = 0,
+		.is_private = 1,
+	}
+};
+
+/* Minimum skipping frame for camera sensors stability */
+#define CRU_FRAME_SKIP		3
 
 /**
  * enum rzg2l_cru_dma_state - DMA states
@@ -69,6 +113,8 @@ struct rzg2l_cru_ip {
  * @format: 4CC format identifier (V4L2_PIX_FMT_*)
  * @icndmr: ICnDMR register value
  * @yuv: Flag to indicate whether the format is YUV-based.
+ * @bpp: bytes per pixel
+ * @fmt_types: specifies the pixel encoding value(YUV, RGB or BAYER).
  */
 struct rzg2l_cru_ip_format {
 	/*
@@ -80,9 +126,14 @@ struct rzg2l_cru_ip_format {
 	u32 format;
 	u32 icndmr;
 	bool yuv;
+	enum v4l2_pixel_encoding fmt_types;
+	u8 bpp;
+	u32 rawsttyp;
 };
 
 struct rzg2l_cru_info {
+	u8 cru_type;
+	int max_cru_channels;
 	unsigned int max_width;
 	unsigned int max_height;
 	u16 image_conv;
@@ -111,6 +162,8 @@ struct rzg2l_cru_info {
  * @svc_channel:	SVC0/1/2/3 to use for RZ/G3E
  * @buf_addr:		Memory addresses where current video data is written.
  * @notifier:		V4L2 asynchronous subdevs notifier
+ *
+ * @ctrl_handler:	V4L2 control handler associated with CRU
  *
  * @ip:			Image processing subdev info
  * @csi:		CSI info
@@ -148,7 +201,6 @@ struct rzg2l_cru_dev {
 
 	u8 svc_channel;
 	dma_addr_t buf_addr[RZG2L_CRU_HW_BUFFER_DEFAULT];
-
 	struct v4l2_async_notifier notifier;
 
 	struct rzg2l_cru_ip ip;
@@ -168,9 +220,19 @@ struct rzg2l_cru_dev {
 	unsigned int sequence;
 	enum rzg2l_cru_dma_state state;
 
+	struct v4l2_ctrl_handler ctrl_handler;
+
 	struct v4l2_pix_format format;
 
+	bool is_frame_skip;
+
 	struct task_struct *retry_thread;
+
+	int id;
+	struct workqueue_struct *work_queue;
+	struct delayed_work rzg2l_cru_resume;
+	wait_queue_head_t setup_wait;
+	bool suspend;
 	bool is_csi;
 };
 
@@ -190,13 +252,12 @@ int rzg2l_cru_video_register(struct rzg2l_cru_dev *cru);
 void rzg2l_cru_video_unregister(struct rzg2l_cru_dev *cru);
 irqreturn_t rzg2l_cru_irq(int irq, void *data);
 irqreturn_t rzg3e_cru_irq(int irq, void *data);
+irqreturn_t rzv2h_cru_irq(int irq, void *data);
 
 const struct v4l2_format_info *rzg2l_cru_format_from_pixel(u32 format);
-
 int rzg2l_cru_ip_subdev_register(struct rzg2l_cru_dev *cru);
 void rzg2l_cru_ip_subdev_unregister(struct rzg2l_cru_dev *cru);
 struct v4l2_mbus_framefmt *rzg2l_cru_ip_get_src_fmt(struct rzg2l_cru_dev *cru);
-
 const struct rzg2l_cru_ip_format *rzg2l_cru_ip_code_to_fmt(unsigned int code);
 const struct rzg2l_cru_ip_format *rzg2l_cru_ip_format_to_fmt(u32 format);
 const struct rzg2l_cru_ip_format *rzg2l_cru_ip_index_to_fmt(u32 index);
@@ -211,4 +272,7 @@ void rzg3e_cru_disable_interrupts(struct rzg2l_cru_dev *cru);
 bool rzg2l_fifo_empty(struct rzg2l_cru_dev *cru);
 bool rzg3e_fifo_empty(struct rzg2l_cru_dev *cru);
 
+
+void rzg2l_cru_resume_start_streaming(struct work_struct *work);
+void rzg2l_cru_suspend_stop_streaming(struct rzg2l_cru_dev *cru);
 #endif
