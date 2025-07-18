@@ -6,24 +6,247 @@
  */
 
 #include <linux/delay.h>
-#include "rzg2l-cru.h"
+#include <media/mipi-csi2.h>
 
-struct rzg2l_cru_ip_format {
-	u32 code;
-	unsigned int datatype;
-	unsigned int bpp;
-};
+#include "rzg2l-cru.h"
+#include "rzg2l-cru-regs.h"
 
 static const struct rzg2l_cru_ip_format rzg2l_cru_ip_formats[] = {
-	{ .code = MEDIA_BUS_FMT_UYVY8_1X16,	.datatype = 0x1e, .bpp = 16 },
+	{
+		.code = MEDIA_BUS_FMT_UYVY8_1X16,
+		.datatype = MIPI_CSI2_DT_YUV422_8B,
+		.format = V4L2_PIX_FMT_UYVY,
+		.bpp = 2,
+		.icndmr = ICnDMR_YCMODE_UYVY,
+		.fmt_types = V4L2_PIXEL_ENC_YUV,
+	},
+	{
+		.code = MEDIA_BUS_FMT_UYVY8_1X16,
+		.datatype = MIPI_CSI2_DT_YUV422_8B,
+		.format = V4L2_PIX_FMT_NV16,
+		.bpp = 1,
+		.icndmr = ICnDMR_YCMODE_NV16,
+		.fmt_types = V4L2_PIXEL_ENC_YUV,
+	},
+	{
+		.code = MEDIA_BUS_FMT_UYVY10_2X10,
+		.datatype = MIPI_CSI2_DT_YUV422_10B,
+		.format = V4L2_PIX_FMT_UYVY,
+		.bpp = 2,
+		.icndmr = ICnDMR_YCMODE_UYVY,
+		.fmt_types = V4L2_PIXEL_ENC_YUV,
+	},
+	{
+		.code = MEDIA_BUS_FMT_YUYV8_1X16,
+		.datatype = MIPI_CSI2_DT_YUV422_8B,
+		.format = V4L2_PIX_FMT_YUYV,
+		.bpp = 2,
+		.icndmr = ICnDMR_YCMODE_YUYV,
+		.fmt_types = V4L2_PIXEL_ENC_YUV,
+	},
+	{
+		.code = MEDIA_BUS_FMT_Y8_1X8,
+		.datatype = MIPI_CSI2_DT_RAW8,
+		.format = V4L2_PIX_FMT_GREY,
+		.bpp = 1,
+		.icndmr = ICnDMR_YCMODE_GREY,
+		.fmt_types = V4L2_PIXEL_ENC_YUV,
+	},
+	{
+		.code = MEDIA_BUS_FMT_RGB888_1X24,
+		.datatype = MIPI_CSI2_DT_RGB888,
+		.format = V4L2_PIX_FMT_BGR24,
+		.bpp = 3,
+		.icndmr = ICnDMR_RGBMODE_RGB24,
+		.fmt_types = V4L2_PIXEL_ENC_RGB,
+	},
+	{
+		.code = MEDIA_BUS_FMT_RGB444_1X12,
+		.datatype = MIPI_CSI2_DT_RGB444,
+		.format = V4L2_PIX_FMT_XBGR32,
+		.bpp = 4,
+		.icndmr = ICnDMR_RGBMODE_XRGB32,
+		.fmt_types = V4L2_PIXEL_ENC_RGB,
+	},
+	{
+		.code = MEDIA_BUS_FMT_RGB565_2X8_LE,
+		.datatype = MIPI_CSI2_DT_RGB565,
+		.format = V4L2_PIX_FMT_ABGR32,
+		.bpp = 4,
+		.icndmr = ICnDMR_RGBMODE_ABGR32,
+		.fmt_types = V4L2_PIXEL_ENC_RGB,
+	},
+	{
+		.code = MEDIA_BUS_FMT_RGB666_1X18,
+		.datatype = MIPI_CSI2_DT_RGB666,
+		.format = V4L2_PIX_FMT_ARGB32,
+		.bpp = 4,
+		.icndmr = ICnDMR_RGBMODE_ARGB32,
+		.fmt_types = V4L2_PIXEL_ENC_RGB,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SBGGR8_1X8,
+		.format = V4L2_PIX_FMT_SBGGR8,
+		.datatype = MIPI_CSI2_DT_RAW8,
+		.bpp = 1,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SGBRG8_1X8,
+		.format = V4L2_PIX_FMT_SGBRG8,
+		.datatype = MIPI_CSI2_DT_RAW8,
+		.bpp = 1,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SGRBG8_1X8,
+		.format = V4L2_PIX_FMT_SGRBG8,
+		.datatype = MIPI_CSI2_DT_RAW8,
+		.bpp = 1,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SRGGB8_1X8,
+		.format = V4L2_PIX_FMT_SRGGB8,
+		.datatype = MIPI_CSI2_DT_RAW8,
+		.bpp = 1,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SRGGB10_1X10,
+		.datatype = MIPI_CSI2_DT_RAW10,
+		.format = V4L2_PIX_FMT_SRGGB10,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SGRBG10_1X10,
+		.datatype = MIPI_CSI2_DT_RAW10,
+		.format = V4L2_PIX_FMT_SGRBG10,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SGBRG10_1X10,
+		.datatype = MIPI_CSI2_DT_RAW10,
+		.format = V4L2_PIX_FMT_SGBRG10,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SBGGR10_1X10,
+		.datatype = MIPI_CSI2_DT_RAW10,
+		.format = V4L2_PIX_FMT_SBGGR10,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SRGGB12_1X12,
+		.datatype = MIPI_CSI2_DT_RAW12,
+		.format = V4L2_PIX_FMT_SRGGB12,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SGRBG12_1X12,
+		.datatype = MIPI_CSI2_DT_RAW12,
+		.format = V4L2_PIX_FMT_SGRBG12,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SGBRG12_1X12,
+		.datatype = MIPI_CSI2_DT_RAW12,
+		.format = V4L2_PIX_FMT_SGBRG12,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SBGGR12_1X12,
+		.datatype = MIPI_CSI2_DT_RAW12,
+		.format = V4L2_PIX_FMT_SBGGR12,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SRGGB14_1X14,
+		.datatype = MIPI_CSI2_DT_RAW14,
+		.format = V4L2_PIX_FMT_SRGGB14P,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SGRBG14_1X14,
+		.datatype = MIPI_CSI2_DT_RAW14,
+		.format = V4L2_PIX_FMT_SGRBG14P,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SGBRG14_1X14,
+		.datatype = MIPI_CSI2_DT_RAW14,
+		.format = V4L2_PIX_FMT_SGBRG14P,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SBGGR14_1X14,
+		.datatype = MIPI_CSI2_DT_RAW14,
+		.format = V4L2_PIX_FMT_SBGGR14P,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SRGGB16_1X16,
+		.datatype = MIPI_CSI2_DT_RAW16,
+		.format = V4L2_PIX_FMT_SRGGB16,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SGRBG16_1X16,
+		.datatype = MIPI_CSI2_DT_RAW16,
+		.format = V4L2_PIX_FMT_SGRBG16,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SGBRG16_1X16,
+		.datatype = MIPI_CSI2_DT_RAW16,
+		.format = V4L2_PIX_FMT_SGBRG16,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
+	{
+		.code = MEDIA_BUS_FMT_SBGGR16_1X16,
+		.datatype = MIPI_CSI2_DT_RAW16,
+		.format = V4L2_PIX_FMT_SBGGR16,
+		.bpp = 2,
+		.icndmr = 0,
+		.fmt_types = V4L2_PIXEL_ENC_BAYER,
+	},
 };
 
-enum rzg2l_csi2_pads {
-	RZG2L_CRU_IP_SINK = 0,
-	RZG2L_CRU_IP_SOURCE,
-};
-
-static const struct rzg2l_cru_ip_format *rzg2l_cru_ip_code_to_fmt(unsigned int code)
+const struct rzg2l_cru_ip_format *rzg2l_cru_ip_code_to_fmt(unsigned int code)
 {
 	unsigned int i;
 
@@ -32,6 +255,26 @@ static const struct rzg2l_cru_ip_format *rzg2l_cru_ip_code_to_fmt(unsigned int c
 			return &rzg2l_cru_ip_formats[i];
 
 	return NULL;
+}
+
+const struct rzg2l_cru_ip_format *rzg2l_cru_ip_format_to_fmt(u32 format)
+{
+	unsigned int i;
+
+	for (i = 0; i < ARRAY_SIZE(rzg2l_cru_ip_formats); i++) {
+		if (rzg2l_cru_ip_formats[i].format == format)
+			return &rzg2l_cru_ip_formats[i];
+	}
+
+	return NULL;
+}
+
+const struct rzg2l_cru_ip_format *rzg2l_cru_ip_index_to_fmt(u32 index)
+{
+	if (index >= ARRAY_SIZE(rzg2l_cru_ip_formats))
+		return NULL;
+
+	return &rzg2l_cru_ip_formats[index];
 }
 
 struct v4l2_mbus_framefmt *rzg2l_cru_ip_get_src_fmt(struct rzg2l_cru_dev *cru)
@@ -97,6 +340,8 @@ static int rzg2l_cru_ip_set_format(struct v4l2_subdev *sd,
 				   struct v4l2_subdev_state *state,
 				   struct v4l2_subdev_format *fmt)
 {
+	struct rzg2l_cru_dev *cru = v4l2_get_subdevdata(sd);
+	const struct rzg2l_cru_info *info = cru->info;
 	struct v4l2_mbus_framefmt *src_format;
 	struct v4l2_mbus_framefmt *sink_format;
 
@@ -119,9 +364,9 @@ static int rzg2l_cru_ip_set_format(struct v4l2_subdev *sd,
 	sink_format->ycbcr_enc = fmt->format.ycbcr_enc;
 	sink_format->quantization = fmt->format.quantization;
 	sink_format->width = clamp_t(u32, fmt->format.width,
-				     RZG2L_CRU_MIN_INPUT_WIDTH, RZG2L_CRU_MAX_INPUT_WIDTH);
+				     RZG2L_CRU_MIN_INPUT_WIDTH, info->max_width);
 	sink_format->height = clamp_t(u32, fmt->format.height,
-				      RZG2L_CRU_MIN_INPUT_HEIGHT, RZG2L_CRU_MAX_INPUT_HEIGHT);
+				      RZG2L_CRU_MIN_INPUT_HEIGHT, info->max_height);
 
 	fmt->format = *sink_format;
 
@@ -146,16 +391,19 @@ static int rzg2l_cru_ip_enum_frame_size(struct v4l2_subdev *sd,
 					struct v4l2_subdev_state *state,
 					struct v4l2_subdev_frame_size_enum *fse)
 {
+	struct rzg2l_cru_dev *cru = v4l2_get_subdevdata(sd);
+	const struct rzg2l_cru_info *info = cru->info;
+
 	if (fse->index != 0)
 		return -EINVAL;
 
-	if (fse->code != MEDIA_BUS_FMT_UYVY8_1X16)
+	if (!rzg2l_cru_ip_code_to_fmt(fse->code))
 		return -EINVAL;
 
 	fse->min_width = RZG2L_CRU_MIN_INPUT_WIDTH;
 	fse->min_height = RZG2L_CRU_MIN_INPUT_HEIGHT;
-	fse->max_width = RZG2L_CRU_MAX_INPUT_WIDTH;
-	fse->max_height = RZG2L_CRU_MAX_INPUT_HEIGHT;
+	fse->max_width = info->max_width;
+	fse->max_height = info->max_height;
 
 	return 0;
 }
@@ -217,8 +465,10 @@ int rzg2l_cru_ip_subdev_register(struct rzg2l_cru_dev *cru)
 	ip->subdev.entity.function = MEDIA_ENT_F_PROC_VIDEO_PIXEL_FORMATTER;
 	ip->subdev.entity.ops = &rzg2l_cru_ip_entity_ops;
 
-	ip->pads[0].flags = MEDIA_PAD_FL_SINK;
-	ip->pads[1].flags = MEDIA_PAD_FL_SOURCE;
+	ip->pads[RZG2L_CRU_IP_SINK].flags = MEDIA_PAD_FL_SINK |
+					    MEDIA_PAD_FL_MUST_CONNECT;
+	ip->pads[RZG2L_CRU_IP_SOURCE].flags = MEDIA_PAD_FL_SOURCE |
+					      MEDIA_PAD_FL_MUST_CONNECT;
 
 	ret = media_entity_pads_init(&ip->subdev.entity, 2, ip->pads);
 	if (ret)
