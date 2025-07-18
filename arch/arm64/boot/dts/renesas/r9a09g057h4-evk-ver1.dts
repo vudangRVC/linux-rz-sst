@@ -47,9 +47,13 @@
  *
  * SEL_CAN01_HEADER:
  *	1: CAN0/1	0: External Header Pin
+ * SEL_PCIE_MODE:
+ * - 0: Root Complex (default)
+ * - 1: Endpoint
  */
 
 #define SEL_CAN01_HEADER	1
+#define SEL_PCIE_MODE		0
 
 / {
 	model = "Renesas EVK ver1 based on r9a09g057h4";
@@ -759,7 +763,7 @@
 };
 
 &csi21 {
-	status = "disabled";
+	status = "okay";
 
 	ports {
 		port {
@@ -777,7 +781,7 @@
 };
 
 &csi22 {
-	status = "disabled";
+	status = "okay";
 
 	ports {
 		port {
@@ -795,7 +799,7 @@
 };
 
 &csi23 {
-	status = "disabled";
+	status = "okay";
 
 	ports {
 		port {
@@ -1118,11 +1122,17 @@
 	/* status = "okay"; */
 };
 
+#if (!SEL_PCIE_MODE)
 &pcie0 {
 	/* Map all possible DDR as inbound ranges */
 	dma-ranges = <0x42000000 0 0x40000000 0 0x40000000 0x4 0x00000000>;
 	status = "okay";
 };
+#else
+&pcie0_ep {
+	status = "okay";
+};
+#endif
 
 &rcar_sound {
 	pinctrl-0 = <&sound_clk_pins &sound_pins_hdmi &sound_pins>;
