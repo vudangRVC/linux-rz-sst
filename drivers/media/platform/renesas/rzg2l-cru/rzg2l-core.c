@@ -136,6 +136,42 @@ static const struct v4l2_async_notifier_operations rzg2l_cru_async_ops = {
 	.complete = rzg2l_cru_group_notify_complete,
 };
 
+static int rzg2l_cru_s_ctrl(struct v4l2_ctrl *ctrl)
+{
+	struct rzg2l_cru_dev *cru = container_of(ctrl->handler,
+						 struct rzg2l_cru_dev,
+						 ctrl_handler);
+	int ret = 0;
+
+	switch (ctrl->id) {
+	case V4L2_CID_MIN_BUFFERS_FOR_CAPTURE:
+		if ((cru->state == RZG2L_CRU_DMA_STOPPED) ||
+		    (cru->state == RZG2L_CRU_DMA_STOPPING))
+			cru->num_buf = ctrl->val;
+		else
+			ret = -EBUSY;
+
+		break;
+	case V4L2_CID_CRU_FRAME_SKIP:
+		if ((cru->state == RZG2L_CRU_DMA_STOPPED) ||
+		    (cru->state == RZG2L_CRU_DMA_STOPPING))
+			cru->is_frame_skip = ctrl->val;
+		else
+			ret = -EBUSY;
+		break;
+
+	default:
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
+static const struct v4l2_ctrl_ops rzg2l_cru_ctrl_ops = {
+	.s_ctrl = rzg2l_cru_s_ctrl,
+};
+
 static int rzg2l_cru_mc_parse_of(struct rzg2l_cru_dev *cru)
 {
 	struct v4l2_fwnode_endpoint vep = {
@@ -218,6 +254,24 @@ static int rzg2l_cru_media_init(struct rzg2l_cru_dev *cru)
 	if (ret)
 		return ret;
 
+	if (cru->info->max_cru_channels > 1) {
+		ret = of_property_read_u32(cru->dev->of_node, "channel,id", &cru->id);
+		if (ret) {
+			if (cru->info->cru_type == RZV2H_CRU_TYPE) {
+				dev_err(cru->dev, "%pOF: No channel,id property found\n",
+						cru->dev->of_node);
+				return -EINVAL;
+			}
+			cru->id = 0;
+		}
+	}
+
+	if (cru->id >= cru->info->max_cru_channels) {
+		dev_err(cru->dev, "%pOF: Invalid channel,id '%u'\n",
+			cru->dev->of_node, cru->id);
+		return -EINVAL;
+	}
+
 	mutex_init(&cru->mdev_lock);
 	mdev = &cru->mdev;
 	mdev->dev = cru->dev;
@@ -247,7 +301,12 @@ static int rzg2l_cru_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct rzg2l_cru_dev *cru;
-	int irq, ret;
+	struct v4l2_ctrl *ctrl;
+	int irq, ret, i;
+
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
+	if (ret)
+		return ret;
 
 	cru = devm_kzalloc(dev, sizeof(*cru), GFP_KERNEL);
 	if (!cru)
@@ -296,11 +355,46 @@ static int rzg2l_cru_probe(struct platform_device *pdev)
 	if (ret)
 		goto error_dma_unregister;
 
+	cru->work_queue =  create_singlethread_workqueue(dev_name(cru->dev));
+	if (!cru->work_queue) {
+		ret = -ENOMEM;
+		goto free_ctrl;
+	}
+	INIT_DELAYED_WORK(&cru->rzg2l_cru_resume, rzg2l_cru_resume_start_streaming);
+
+
 	ret = rzg2l_cru_media_init(cru);
 	if (ret)
 		goto error_dma_unregister;
 
+	/* Add the control about minimum amount of buffers */
+	v4l2_ctrl_handler_init(&cru->ctrl_handler, 2);
+	ctrl = v4l2_ctrl_new_std(&cru->ctrl_handler, &rzg2l_cru_ctrl_ops,
+				 V4L2_CID_MIN_BUFFERS_FOR_CAPTURE,
+				 1, RZG2L_CRU_HW_BUFFER_MAX, 1,
+				 RZG2L_CRU_HW_BUFFER_DEFAULT);
+
+	ctrl->flags &= ~V4L2_CTRL_FLAG_READ_ONLY;
+
+	for (i = 0; i < V4L2_CID_CRU_LIMIT; i++)
+		v4l2_ctrl_new_custom(&cru->ctrl_handler,
+				     &rzg2l_cru_ctrls[i], NULL);
+
+	v4l2_ctrl_handler_setup(&cru->ctrl_handler);
+
+	if (cru->ctrl_handler.error) {
+		dev_err(&pdev->dev, "%s: control initialization error %d\n",
+				    __func__, cru->ctrl_handler.error);
+		ret = cru->ctrl_handler.error;
+		goto free_ctrl;
+	}
+
+	cru->v4l2_dev.ctrl_handler = &cru->ctrl_handler;
+
 	return 0;
+
+free_ctrl:
+	v4l2_ctrl_handler_free(&cru->ctrl_handler);
 
 error_dma_unregister:
 	rzg2l_cru_dma_unregister(cru);
@@ -345,9 +439,12 @@ static const u16 rzg3e_cru_regs[] = {
 	[AMnMB7ADDRH] = 0x74,
 	[AMnMB8ADDRL] = 0x78,
 	[AMnMB8ADDRH] = 0x7c,
+	[AMnUVAOFL] = 0x080,
+	[AMnUVAOFH] = 0x084,
 	[AMnMBVALID] = 0x88,
 	[AMnMADRSL] = 0x8c,
 	[AMnMADRSH] = 0x90,
+	[AMnFIFO] = 0x0f0,
 	[AMnAXIATTR] = 0xec,
 	[AMnFIFOPNTR] = 0xf8,
 	[AMnAXISTP] = 0x110,
@@ -359,6 +456,10 @@ static const u16 rzg3e_cru_regs[] = {
 	[ICnIPMC_C0] = 0x200,
 	[ICnMS] = 0x2d8,
 	[ICnDMR] = 0x304,
+	[ICnTICTRL1] = 0x35C,
+	[ICnTICTRL2] = 0x360,
+	[ICnTISIZE1] = 0x364,
+	[ICnTISIZE2] = 0x368,
 };
 
 static const struct rzg2l_cru_info rzg3e_cru_info = {
@@ -371,6 +472,7 @@ static const struct rzg2l_cru_info rzg3e_cru_info = {
 	.enable_interrupts = rzg3e_cru_enable_interrupts,
 	.disable_interrupts = rzg3e_cru_disable_interrupts,
 	.fifo_empty = rzg3e_fifo_empty,
+	.max_cru_channels = 1,
 };
 
 static const u16 rzg2l_cru_regs[] = {
@@ -394,9 +496,12 @@ static const u16 rzg2l_cru_regs[] = {
 	[AMnMB7ADDRH] = 0x134,
 	[AMnMB8ADDRL] = 0x138,
 	[AMnMB8ADDRH] = 0x13c,
+	[AMnUVAOFL] = 0x140,
+	[AMnUVAOFH] = 0x144,
 	[AMnMBVALID] = 0x148,
 	[AMnMBS] = 0x14c,
 	[AMnAXIATTR] = 0x158,
+	[AMnFIFO] = 0x160,
 	[AMnFIFOPNTR] = 0x168,
 	[AMnAXISTP] = 0x174,
 	[AMnAXISTPACK] = 0x178,
@@ -407,6 +512,7 @@ static const u16 rzg2l_cru_regs[] = {
 };
 
 static const struct rzg2l_cru_info rzg2l_cru_info = {
+	.cru_type = RZG2L_CRU_TYPE,
 	.max_width = 2800,
 	.max_height = 4095,
 	.image_conv = ICnMC,
@@ -415,6 +521,20 @@ static const struct rzg2l_cru_info rzg2l_cru_info = {
 	.enable_interrupts = rzg2l_cru_enable_interrupts,
 	.disable_interrupts = rzg2l_cru_disable_interrupts,
 	.fifo_empty = rzg2l_fifo_empty,
+	.max_cru_channels = 1,
+};
+
+static const struct rzg2l_cru_info rzv2h_cru_info = {
+	.cru_type = RZV2H_CRU_TYPE,
+	.max_width = 4095,
+	.max_height = 4095,
+	.image_conv = ICnIPMC_C0,
+	.regs = rzg3e_cru_regs,
+	.irq_handler = rzv2h_cru_irq,
+	.enable_interrupts = rzg3e_cru_enable_interrupts,
+	.disable_interrupts = rzg3e_cru_disable_interrupts,
+	.fifo_empty = rzg3e_fifo_empty,
+	.max_cru_channels = 4,
 };
 
 static const struct of_device_id rzg2l_cru_of_id_table[] = {
@@ -423,10 +543,59 @@ static const struct of_device_id rzg2l_cru_of_id_table[] = {
 		.data = &rzg3e_cru_info,
 	},
 	{
+		.compatible = "renesas,cru-r9a09g057",
+		.data = &rzv2h_cru_info,
+	},
+	{
 		.compatible = "renesas,rzg2l-cru",
 		.data = &rzg2l_cru_info,
 	},
 	{ /* sentinel */ }
+};
+
+static int rzg2l_cru_suspend(struct device *dev)
+{
+	struct rzg2l_cru_dev *cru = dev_get_drvdata(dev);
+
+	if ((cru->state == RZG2L_CRU_DMA_STOPPED) ||
+	   (cru->state == RZG2L_CRU_DMA_STOPPING))
+		return 0;
+
+	rzg2l_cru_suspend_stop_streaming(cru);
+	if (!(reset_control_status(cru->presetn)))
+		reset_control_assert(cru->presetn);
+	reset_control_assert(cru->aresetn);
+
+	clk_disable_unprepare(cru->vclk);
+	pm_runtime_put_sync(dev);
+
+	return 0;
+
+}
+
+static int rzg2l_cru_resume(struct device *dev)
+{
+	struct rzg2l_cru_dev *cru = dev_get_drvdata(dev);
+
+	if ((cru->state == RZG2L_CRU_DMA_STOPPED) ||
+	   (cru->state == RZG2L_CRU_DMA_STOPPING))
+		return 0;
+
+	reset_control_deassert(cru->aresetn);
+	if (reset_control_status(cru->presetn) > 0)
+		reset_control_deassert(cru->presetn);
+
+	pm_runtime_resume_and_get(dev);
+	clk_prepare_enable(cru->vclk);
+
+	queue_delayed_work_on(0, cru->work_queue, &cru->rzg2l_cru_resume,
+				msecs_to_jiffies(CONNECTION_TIME));
+	return 0;
+
+}
+
+static const struct dev_pm_ops rzg2l_cru_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(rzg2l_cru_suspend, rzg2l_cru_resume)
 };
 MODULE_DEVICE_TABLE(of, rzg2l_cru_of_id_table);
 
@@ -434,6 +603,7 @@ static struct platform_driver rzg2l_cru_driver = {
 	.driver = {
 		.name = "rzg2l-cru",
 		.of_match_table = rzg2l_cru_of_id_table,
+		.pm = &rzg2l_cru_pm_ops,
 	},
 	.probe = rzg2l_cru_probe,
 	.remove = rzg2l_cru_remove,
