@@ -721,8 +721,7 @@ static int rzg2l_mipi_dsi_startup(struct rzg2l_mipi_dsi *dsi,
 
 	if (dsi->info->type == MIPI_DSI_DPHY_RZV2H) {
 		hsfreq = DIV_ROUND_CLOSEST_ULL(vclk_rate * bpp * 8, 8 * dsi->lanes);
-	}
-	else {
+	} else {
 		hsfreq = (mode->clock * bpp * 8) / (8 * dsi->lanes);
 	}
 
