@@ -166,7 +166,7 @@ static const struct sci_port_params sci_port_params[SCIx_NR_REGTYPES] = {
 
 #define sci_getreg(up, offset)		(&to_sci_port(up)->params->regs[offset])
 
-static unsigned int sci_serial_in(struct uart_port *p, int offset)
+static u32 sci_serial_in(struct uart_port *p, unsigned int offset)
 {
 	const struct plat_sci_reg *reg = sci_getreg(p, offset);
 
@@ -180,7 +180,7 @@ static unsigned int sci_serial_in(struct uart_port *p, int offset)
 	return 0;
 }
 
-static void sci_serial_out(struct uart_port *p, int offset, int value)
+static void sci_serial_out(struct uart_port *p, unsigned int offset, u32 value)
 {
 	const struct plat_sci_reg *reg = sci_getreg(p, offset);
 
@@ -363,8 +363,7 @@ static int sci_rxfill(struct uart_port *port)
 static void sci_transmit_chars(struct uart_port *port)
 {
 	struct sci_port *s = to_sci_port(port);
-	struct circ_buf *xmit = &port->state->xmit;
-	unsigned int stopped = uart_tx_stopped(port);
+	struct tty_port *tport = &port->state->port;
 	unsigned int status;
 	unsigned int ctrl;
 	int count;
@@ -372,7 +371,7 @@ static void sci_transmit_chars(struct uart_port *port)
 	status = serial_port_in(port, CSR);
 	if (!(status & CSR_TDRE)) {
 		ctrl = serial_port_in(port, CCR0);
-		if (uart_circ_empty(xmit))
+		if (kfifo_is_empty(&tport->xmit_fifo))
 			ctrl &= ~CCR0_TIE;
 		else
 			ctrl |= CCR0_TIE;
@@ -388,9 +387,6 @@ static void sci_transmit_chars(struct uart_port *port)
 		if (port->x_char) {
 			c = port->x_char;
 			port->x_char = 0;
-		} else if (!uart_circ_empty(xmit) && !stopped) {
-			c = xmit->buf[xmit->tail];
-			xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
 		} else {
 			break;
 		}
@@ -401,9 +397,9 @@ static void sci_transmit_chars(struct uart_port *port)
 		port->icount.tx++;
 	} while (--count > 0);
 
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+	if (kfifo_len(&tport->xmit_fifo) < WAKEUP_CHARS)
 		uart_write_wakeup(port);
-	if (uart_circ_empty(xmit)) {
+	if (kfifo_is_empty(&tport->xmit_fifo)) {
 		ctrl = serial_port_in(port, CCR0);
 		ctrl &= ~CCR0_TIE;
 		ctrl |= CCR0_TEIE;
@@ -625,7 +621,7 @@ static irqreturn_t sci_tx_end_interrupt(int irq, void *ptr)
 {
 	struct uart_port *port = ptr;
 	struct sci_port *s = to_sci_port(port);
-	struct circ_buf *xmit = &port->state->xmit;
+	struct tty_port *tport = &port->state->port;
 	unsigned long flags;
 	unsigned int ctrl;
 
@@ -635,7 +631,7 @@ static irqreturn_t sci_tx_end_interrupt(int irq, void *ptr)
 	serial_port_out(port, CCR0, ctrl);
 	enable_irq(s->irqs[SCIx_TXI_IRQ]);
 
-	if (!uart_circ_empty(xmit))
+	if (!kfifo_is_empty(&tport->xmit_fifo))
 		serial_port_out(port, CCR0, ctrl | CCR0_TE | CCR0_TIE);
 
 	spin_unlock_irqrestore(&port->lock, flags);
@@ -860,7 +856,7 @@ static void sci_shutdown(struct uart_port *port)
 
 	dev_dbg(port->dev, "%s(%d)\n", __func__, port->line);
 
-	mctrl_gpio_disable_ms(to_sci_port(port)->gpios);
+	mctrl_gpio_disable_ms_sync(to_sci_port(port)->gpios);
 
 	spin_lock_irqsave(&port->lock, flags);
 	sci_stop_rx(port);
@@ -872,7 +868,7 @@ static void sci_shutdown(struct uart_port *port)
 	spin_unlock_irqrestore(&port->lock, flags);
 
 	if (s->rx_trigger > 1 && s->rx_fifo_timeout > 0)
-		del_timer_sync(&s->rx_fifo_timer);
+		timer_shutdown_sync(&s->rx_fifo_timer);
 	sci_free_irq(s);
 }
 
@@ -1458,7 +1454,7 @@ static struct uart_driver sci_uart_driver = {
 	.cons		= SCI_CONSOLE,
 };
 
-static int sci_remove(struct platform_device *dev)
+static void sci_remove(struct platform_device *dev)
 {
 	struct sci_port *port = platform_get_drvdata(dev);
 
@@ -1469,8 +1465,6 @@ static int sci_remove(struct platform_device *dev)
 
 	if (port->port.fifosize > 1)
 		device_remove_file(&dev->dev, &dev_attr_rx_fifo_trigger);
-
-	return 0;
 }
 
 #define SCI_OF_DATA(type, regtype)	((void *)((type) << 16 | (regtype)))
@@ -1513,7 +1507,7 @@ static struct plat_sci_port *sci_parse_dt(struct platform_device *pdev,
 
 	data = of_device_get_match_data(&pdev->dev);
 
-	rstc = devm_reset_control_array_get(&pdev->dev, false, false);
+	rstc = devm_reset_control_array_get_exclusive(&pdev->dev);
 	if (IS_ERR(rstc))
 		return ERR_PTR(dev_err_probe(&pdev->dev, PTR_ERR(rstc),
 						 "failed to get reset ctrl\n"));
@@ -1704,8 +1698,8 @@ static void __exit sci_exit(void)
 #ifdef CONFIG_SERIAL_RZ_SCI_EARLYCON
 static struct plat_sci_port port_cfg __initdata;
 
-static int __init early_console_setup(struct earlycon_device *device,
-					  int type)
+static u32 __init early_console_setup(struct earlycon_device *device,
+					  unsigned int type)
 {
 	if (!device->port.membase)
 		return -ENODEV;
