@@ -75,6 +75,7 @@ struct rzg2l_mipi_dsi {
 	struct mipi_dsi_host host;
 	struct drm_bridge bridge;
 	struct drm_bridge *next_bridge;
+	struct drm_panel *panel;
 
 	const struct rzg2l_mipi_dsi_hw_info *info;
 
@@ -104,6 +105,8 @@ host_to_rzg2l_mipi_dsi(struct mipi_dsi_host *host)
 {
 	return container_of(host, struct rzg2l_mipi_dsi, host);
 }
+
+static int rzg2l_mipi_dsi_find_panel_or_bridge(struct rzg2l_mipi_dsi *mipi_dsi);
 
 struct rzg2l_mipi_dsi_timings {
 	unsigned long hsfreq_max;
@@ -1012,7 +1015,12 @@ static int rzg2l_mipi_dsi_attach(struct drm_bridge *bridge, struct drm_encoder *
 				enum drm_bridge_attach_flags flags)
 {
 	struct rzg2l_mipi_dsi *dsi = bridge_to_rzg2l_mipi_dsi(bridge);
+	int ret;
 
+	ret = rzg2l_mipi_dsi_find_panel_or_bridge(dsi);
+	dev_dbg(dsi->dev, "Ret is %d\n", ret);
+	if (ret < 0)
+		return ret;
 	return drm_bridge_attach(encoder, dsi->next_bridge, bridge,
 				flags);
 }
@@ -1043,10 +1051,31 @@ static void rzg2l_mipi_dsi_atomic_enable(struct drm_bridge *bridge,
 	struct rzg2l_mipi_dsi *dsi = bridge_to_rzg2l_mipi_dsi(bridge);
 	int ret;
 
+	if (dsi->panel) {
+		dev_info(dsi->dev, "Panel is in preparation\n");
+
+		/*
+		 * Enable clock first to ensure LP/HS channel is ready
+		 * before sending DCS commands. This avoids uncertainty
+		 * since the function returns void.
+		 */
+		ret = rzg2l_mipi_dsi_start_hs_clock(dsi);
+		if (ret < 0) {
+			dev_err(dsi->dev, "Failed to start HS clock\n");
+			return;
+		}
+
+		drm_panel_prepare(dsi->panel);
+		drm_panel_enable(dsi->panel);
+
+		goto start_video;
+	}
+
 	ret = rzg2l_mipi_dsi_start_hs_clock(dsi);
 	if (ret < 0)
 		goto err_stop;
 
+start_video:
 	ret = rzg2l_mipi_dsi_start_video(dsi);
 	if (ret < 0)
 		goto err_stop_clock;
@@ -1288,6 +1317,7 @@ static ssize_t rzg2l_mipi_dsi_host_transfer(struct mipi_dsi_host *host,
 		value |= SQCH0DSC0AR_FMT_SHORT;
 	}
 
+	/* Write all Descriptors*/
 	rzg2l_mipi_dsi_link_write(dsi, SQCH0DSC0AR, value);
 
 	/*
@@ -1374,6 +1404,77 @@ static const struct dev_pm_ops rzg2l_mipi_pm_ops = {
 /* -----------------------------------------------------------------------------
  * Probe & Remove
  */
+
+static int rzg2l_mipi_dsi_find_panel_or_bridge(struct rzg2l_mipi_dsi *dsi)
+{
+	struct device_node *local_output = NULL;
+	struct device_node *remote_input = NULL;
+	struct device_node *remote = NULL;
+	struct device_node *node;
+	bool is_bridge = false;
+	int ret = 0;
+
+	local_output = of_graph_get_endpoint_by_regs(dsi->dev->of_node,
+						     1, 0);
+	if (!local_output) {
+		dev_info(dsi->dev, "unconnected port@1\n");
+		ret = -ENODEV;
+		goto done;
+	}
+
+	/*
+	 * Locate the connected entity and
+	 * infer its type from the number of endpoints.
+	 */
+	remote = of_graph_get_remote_port_parent(local_output);
+	if (!remote) {
+		dev_info(dsi->dev, "unconnected endpoint %pOF\n",
+		local_output);
+		ret = -ENODEV;
+		goto done;
+	}
+
+	if (!of_device_is_available(remote)) {
+		dev_info(dsi->dev, "connected entity %pOF is disabled\n",
+		remote);
+		ret = -ENODEV;
+		goto done;
+	}
+
+	remote_input = of_graph_get_remote_endpoint(local_output);
+
+	for_each_endpoint_of_node(remote, node) {
+		if (node != remote_input) {
+			/*
+			 * The endpoint which is not input node must be bridge
+			 */
+			is_bridge = true;
+			of_node_put(node);
+			break;
+		}
+	}
+
+	if (is_bridge) {
+		dsi->next_bridge = of_drm_find_bridge(remote);
+		if (!dsi->next_bridge) {
+			ret = -EPROBE_DEFER;
+			goto done;
+		}
+	} else {
+		dsi->panel = of_drm_find_panel(remote);
+		if (IS_ERR(dsi->panel)) {
+			ret = PTR_ERR(dsi->panel);
+			goto done;
+		}
+	}
+
+done:
+	of_node_put(local_output);
+	of_node_put(remote_input);
+	of_node_put(remote);
+
+	return ret;
+}
 
 static int rzg2l_mipi_dsi_probe(struct platform_device *pdev)
 {
