@@ -238,8 +238,7 @@
 	mipi_panel: panel {
 		compatible = "rzsbc,tc358762";
 		status = "disabled";
-		/* Example: to change the panel version, set panel-id = <PANEL_5_V1>; (default value) */
-		/* Use this property to specify the panel version */
+		panel-id = <PANEL_5_V1>;
 
 		ports {
 			#address-cells = <1>;
