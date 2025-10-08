@@ -12,19 +12,18 @@
 #include <dt-bindings/soc/renesas,rsci.h>
 
 /*
- * Jumper setting
+ * Device Tree Configuration
  *
- * Please change the jumper setting corresponding to below Macros:
+ * Configure the following macros in the device tree to select the desired functionality:
  *
  * RSCI0_UART_I2C_SEL:
- *      0 - GPIO (default)          1 - RSCI_SPI0
+ *   0 - GPIO (default)          1 - RSCI_SPI0
  * RSCI2_UART_I2C_SEL:
- *      0 - RI2C4 (default)         1 - RSCI_I2C2
+ *   0 - RI2C4 (default)         1 - RSCI_I2C2
  * RSCI6_UART_I2C_SEL:
- *      0 - RI2C6 (default)         1 - RSCI_I2C6
+ *   0 - RI2C6 (default)         1 - RSCI_I2C6
  * PCIE_MODE_SEL:
- * - 0: Root Complex (default)
- * - 1: Endpoint
+ *   0 - Root Complex (default)  1 - Endpoint
  */
 
 #define RSCI0_UART_I2C_SEL      0
@@ -34,7 +33,7 @@
 
 / {
     model = "Renesas RDK ver1 based on r9a09g057h4";
-    compatible = "renesas,r9a09g057h4-evk-ver1", "renesas,r9a09g057h4", "renesas,r9a09g057";
+    compatible = "renesas,r9a09g057h4-rdk-ver1", "renesas,r9a09g057h4", "renesas,r9a09g057";
 
     aliases {
         serial0 = &scif;
@@ -726,19 +725,19 @@
 };
 
 &xhci0 {
-        pinctrl-0 = <&usb30_pins>;
-        pinctrl-names = "default";
+    pinctrl-0 = <&usb30_pins>;
+    pinctrl-names = "default";
 
-        memory-region = <&global_cma>;
-        status = "okay";
+    memory-region = <&global_cma>;
+    status = "okay";
 };
 
 &xhci1 {
-        pinctrl-0 = <&usb31_pins>;
-        pinctrl-names = "default";
+    pinctrl-0 = <&usb31_pins>;
+    pinctrl-names = "default";
 
-        memory-region = <&global_cma>;
-        status = "okay";
+    memory-region = <&global_cma>;
+    status = "okay";
 };
 
 &i3c {
