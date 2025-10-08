@@ -28,7 +28,7 @@
 
 #define RSCI0_UART_I2C_SEL      0
 #define RSCI2_UART_I2C_SEL      0
-#define RSCI6_UART_I2C_SEL      0
+#define RSCI6_UART_I2C_SEL      1
 #define PCIE_MODE_SEL           0
 
 / {
@@ -254,20 +254,28 @@
              <RZV2H_PORT_PINMUX(8, 1, 5)>; 		/* CRX0 */
     };
 
+    can0-stb-hog {
+        gpio-hog;
+        gpios = <RZV2H_GPIO(A, 2) GPIO_ACTIVE_HIGH>;
+        output-low;
+        line-name = "can0_stb";
+    };
+
     can3_pins: can3 {
         pinmux = <RZV2H_PORT_PINMUX(8, 6, 5)>, 	/* CTX3 */
              <RZV2H_PORT_PINMUX(8, 7, 5)>; 		/* CRX3 */
     };
 
+    can3-stb-hog {
+        gpio-hog;
+        gpios = <RZV2H_GPIO(A, 3) GPIO_ACTIVE_HIGH>;
+        output-low;
+        line-name = "can3_stb";
+    };
+
     scif_pins: scif {
         pins =  "SCIF_RXD", "SCIF_TXD";
         renesas,output-impedance = <1>;
-    };
-
-    sci5_pins: sci5 {
-        pinmux = <RZV2H_PORT_PINMUX(7, 2, 1)>, 	/* TXD5_MOSI5_SDA5 */
-             <RZV2H_PORT_PINMUX(7, 3, 1)>; 		/* RXD5_MISO5_SCL5 */
-        bias-pull-up;
     };
 
     sdhi0_pins: sd0 {
@@ -307,23 +315,9 @@
     };
 #endif
 
-    rsci_i2c7_pins: rsci_i2c7 {
-        pinmux = <RZV2H_PORT_PINMUX(7, 6, 1)>, /* TXD7_MOSI7_SDA7 */
-             <RZV2H_PORT_PINMUX(7, 7, 1)>;     /* RXD7_MISO7_SCL7 */
-        drive-open-drain = <1>;
-    };
-
     i2c8_pins: i2c8 {
         pinmux = <RZV2H_PORT_PINMUX(0, 6, 1)>, 	/* I2C8_SDA */
              <RZV2H_PORT_PINMUX(0, 7, 1)>; 		/* I2C8_SCL */
-    };
-
-    master_spi0_pins: master_spi0 {
-        pinmux = <RZV2H_PORT_PINMUX(9, 0, 1)>, /* MOSIA */
-             <RZV2H_PORT_PINMUX(9, 1, 1)>,     /* MISOA */
-             <RZV2H_PORT_PINMUX(9, 2, 1)>,     /* RSPCKA */
-             <RZV2H_PORT_PINMUX(9, 3, 1)>,     /* SSLA0 */
-             <RZV2H_PORT_PINMUX(9, 4, 1)>;     /* SSLA1 */
     };
 
     usb30_pins: usb30 {
@@ -358,12 +352,6 @@
     status = "okay";
 };
 
-&sci5 {
-    pinctrl-0 = <&sci5_pins>;
-    pinctrl-names = "default";
-    status = "okay";
-};
-
 &canfd {
     pinctrl-0 = <&can0_pins &can3_pins>;
     pinctrl-names = "default";
@@ -373,7 +361,7 @@
         status = "okay";
     };
 
-    channel1 {
+    channel3 {
         status = "okay";
     };
 };
@@ -489,24 +477,6 @@
                 remote-endpoint = <&csi21_in>;
             };
         };
-    };
-};
-
-&rsci_i2c7 {
-    pinctrl-0 = <&rsci_i2c7_pins>;
-    pinctrl-names = "default";
-    status = "okay";
-};
-
-&spi0 {
-    pinctrl-0 = <&master_spi0_pins>;
-    pinctrl-names = "default";
-    status = "okay";
-
-    spidev@0 {
-        compatible = "semtech,sx1301";
-        reg = <0>;
-        spi-max-frequency = <2000000>;
     };
 };
 
