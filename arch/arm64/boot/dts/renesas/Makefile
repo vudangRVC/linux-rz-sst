@@ -153,22 +153,14 @@ r9a07g044c2-smarc-cru-csi-ov5645-dtbs := r9a07g044c2-smarc.dtb r9a07g044c2-smarc
 dtb-$(CONFIG_ARCH_R9A07G044) += r9a07g044c2-smarc-cru-csi-ov5645.dtb
 
 dtb-$(CONFIG_ARCH_R9A07G044) += r9a07g044l2-remi-pi.dtb
-dtb-$(CONFIG_ARCH_R9A07G044) += r9a07g044l2-smarc.dtb
-dtb-$(CONFIG_ARCH_R9A07G044) += r9a07g044l2-smarc-cru-csi-ov5645.dtbo
-r9a07g044l2-smarc-cru-csi-ov5645-dtbs := r9a07g044l2-smarc.dtb r9a07g044l2-smarc-cru-csi-ov5645.dtbo
-dtb-$(CONFIG_ARCH_R9A07G044) += r9a07g044l2-smarc-cru-csi-ov5645.dtb
+DTC_FLAGS_rzg2l-evk += -@
+dtb-$(CONFIG_ARCH_R9A07G044) += rzg2l-evk.dtb
 
 DTC_FLAGS_rzg2l-sbc += -@
 dtb-$(CONFIG_ARCH_R9A07G044) += rzg2l-sbc.dtb
-subdir-$(CONFIG_ARCH_R9A07G044) += overlays
 
-DTC_FLAGS_rs-g2l100 += -@
-dtb-$(CONFIG_ARCH_R9A07G044) += rs-g2l100.dtb
-
-dtb-$(CONFIG_ARCH_R9A07G054) += r9a07g054l2-smarc.dtb
-dtb-$(CONFIG_ARCH_R9A07G054) += r9a07g054l2-smarc-cru-csi-ov5645.dtbo
-r9a07g054l2-smarc-cru-csi-ov5645-dtbs := r9a07g054l2-smarc.dtb r9a07g054l2-smarc-cru-csi-ov5645.dtbo
-dtb-$(CONFIG_ARCH_R9A07G054) += r9a07g054l2-smarc-cru-csi-ov5645.dtb
+DTC_FLAGS_rzv2l-evk += -@
+dtb-$(CONFIG_ARCH_R9A07G054) += rzv2l-evk.dtb
 
 dtb-$(CONFIG_ARCH_R9A08G045) += r9a08g045s33-smarc.dtb
 dtb-$(CONFIG_ARCH_R9A08G045) += r9a08g045s33-smarc-pmod1-type-3a.dtbo
@@ -190,12 +182,19 @@ dtb-$(CONFIG_ARCH_R9A09G056) += rzv2-evk-cn15-sd.dtbo
 r9a09g056n48-rzv2n-evk-cn15-sd-dtbs := r9a09g056n48-rzv2n-evk.dtb rzv2-evk-cn15-sd.dtbo
 dtb-$(CONFIG_ARCH_R9A09G056) += r9a09g056n48-rzv2n-evk-cn15-sd.dtb
 
-dtb-$(CONFIG_ARCH_R9A09G057) += r9a09g057h44-rzv2h-evk.dtb r9a09g057h4-rdk-ver1.dtb
+DTC_FLAGS_rzv2h-evk-ver1 += -@
+dtb-$(CONFIG_ARCH_R9A09G057) += rzv2h-evk-ver1.dtb
+
+DTC_FLAGS_rzv2h-rdk-ver1 += -@
+dtb-$(CONFIG_ARCH_R9A09G057) += rzv2h-rdk-ver1.dtb
+
+subdir-y += overlays
+
 dtb-$(CONFIG_ARCH_R9A09G057) += rzv2-evk-cn15-emmc.dtbo
-r9a09g057h44-rzv2h-evk-cn15-emmc-dtbs := r9a09g057h44-rzv2h-evk.dtb rzv2-evk-cn15-emmc.dtbo
+r9a09g057h44-rzv2h-evk-cn15-emmc-dtbs := rzv2h-evk-ver1.dtb rzv2-evk-cn15-emmc.dtbo
 dtb-$(CONFIG_ARCH_R9A09G057) += r9a09g057h44-rzv2h-evk-cn15-emmc.dtb
 dtb-$(CONFIG_ARCH_R9A09G057) += rzv2-evk-cn15-sd.dtbo
-r9a09g057h44-rzv2h-evk-cn15-sd-dtbs := r9a09g057h44-rzv2h-evk.dtb rzv2-evk-cn15-sd.dtbo
+r9a09g057h44-rzv2h-evk-cn15-sd-dtbs := rzv2h-evk-ver1.dtb rzv2-evk-cn15-sd.dtbo
 dtb-$(CONFIG_ARCH_R9A09G057) += r9a09g057h44-rzv2h-evk-cn15-sd.dtb
 dtb-$(CONFIG_ARCH_R9A09G057) += r9a09g057h48-kakip.dtb
 
