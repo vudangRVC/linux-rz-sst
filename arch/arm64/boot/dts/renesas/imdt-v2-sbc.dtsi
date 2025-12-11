@@ -119,9 +119,9 @@
 		regulator-min-microvolt = <3300000>;
 		regulator-max-microvolt = <3300000>;
 
-		gpio = <&m2_gpio 5 GPIO_ACTIVE_HIGH>;
+		gpio = <&pinctrl RZG2L_GPIO(7,4) GPIO_ACTIVE_HIGH>;
 
-		startup-delay-us = <5000>; /* Measured to take 0.5ms using a scope, set to 5ms so there's a safety factor to ensure the regulator is stable */
+		startup-delay-us = <5000>;
 		enable-active-high;
 	};
 
@@ -295,12 +295,11 @@
 	/* cam_pwr_en turns on 1.2V reg, 1.8V_CAM supply and 3.3V_CAM supply. */
 	/* Schematic on SOM shows this being PB2/CAM0&1_PWR but it's actually using */ 
 	/* P74. And you can trace this from the SOM to the SBC schematic */
-	cam_pwr_en {
-		gpio-hog;
-		gpios = <RZG2L_GPIO(7, 4) GPIO_ACTIVE_HIGH>;
-		output-high;
-		line-name = "cam_pwr_en";
-	};
+	//cam_pwr_en {
+	//	gpios = <RZG2L_GPIO(7, 4) GPIO_ACTIVE_HIGH>;
+	//	output-high;
+	//	line-name = "cam_pwr_en";
+	//};
 
 	fan_pwr_en {
 		gpio-hog;
@@ -598,7 +597,9 @@
 		clocks = <&clk_ext_camera>;
 
 		reset-gpios = <&cam_gpio 8 GPIO_ACTIVE_LOW>;
-		power-gpios = <&cam_gpio 0 GPIO_ACTIVE_LOW>;
+		/* power-gpios removed — controlled by hardware regulator VM2M_3V3 */
+		vdd-supply = <&VM2M_3V3>;
+		vcc-supply = <&VM2M_3V3>;
 
 		port {
 			ap1302_to_csi20: endpoint {
@@ -636,7 +637,9 @@
 		clocks = <&clk_ext_camera>;
 
 		reset-gpios = <&cam_gpio 9 GPIO_ACTIVE_LOW>;
-		power-gpios = <&cam_gpio 1 GPIO_ACTIVE_LOW>;
+		/* power-gpios removed — controlled by hardware regulator VM2M_3V3 */
+		vdd-supply = <&VM2M_3V3>;
+		vcc-supply = <&VM2M_3V3>;
 
 		port {
 			ap1302_to_csi21: endpoint {
@@ -713,6 +716,7 @@
 		gpio-hog;
 		gpios = <4 GPIO_ACTIVE_HIGH>;
 		output-low;
+		vcc-supply = <&VM2M_3V3>;
 		};
 
 		// TODO - Expose ISP_CAM_TRIG?
@@ -745,6 +749,7 @@
 		// TODO: define GPIO hogs and Interrupt GPIO
 		// interrupt-parent = <&pinctrl>;
 		// interrupts = <RZG2L_GPIO(9, 7) IRQ_TYPE_LEVEL_LOW>;
+		vcc-supply = <&VM2M_3V3>;
 	};
 
 	// TODO: 9FGV0241 (https://lore.kernel.org/all/20220219015003.507601-2-marex@denx.de/T/)
