@@ -151,6 +151,7 @@ struct ar1335_dev {
 
 	struct regulator *supplies[ARRAY_SIZE(ar1335_supply_names)];
 	struct gpio_desc *reset_gpio;
+	struct gpio_desc *power_gpio;
 
 	/* lock to protect all members below */
 	struct mutex lock;
@@ -1003,7 +1004,10 @@ static int ar1335_power_off(struct device *dev)
 	clk_disable_unprepare(sensor->extclk);
 
 	if (sensor->reset_gpio)
-		gpiod_set_value(sensor->reset_gpio, 1); /* assert RESET signal */
+		gpiod_set_value_cansleep(sensor->reset_gpio, 1); /* assert RESET signal */
+
+	if (sensor->power_gpio)
+		gpiod_set_value_cansleep(sensor->power_gpio, 1); /* Disable power (active LOW) */
 
 	for (i = ARRAY_SIZE(ar1335_supply_names) - 1; i >= 0; i--) {
 		if (sensor->supplies[i])
@@ -1018,11 +1022,30 @@ static int ar1335_power_on(struct device *dev)
 	struct ar1335_dev *sensor = to_ar1335_dev(sd);
 	unsigned int cnt;
 	int ret;
-		gpiod_set_value(sensor->reset_gpio, 0);
-		mdelay(1);
-		gpiod_set_value(sensor->reset_gpio, 1);
-		mdelay(1);
 
+	/* Enable power supplies */
+	for (cnt = 0; cnt < ARRAY_SIZE(ar1335_supply_names); cnt++) {
+		if (sensor->supplies[cnt]) {
+			ret = regulator_enable(sensor->supplies[cnt]);
+			if (ret)
+				goto disable_supplies;
+		}
+	}
+
+	/* Enable clock */
+	ret = clk_prepare_enable(sensor->extclk);
+	if (ret)
+		goto disable_supplies;
+
+	/* Reset sequence */
+	if (sensor->reset_gpio) {
+		gpiod_set_value_cansleep(sensor->reset_gpio, 1);  /* Assert reset */
+		usleep_range(1000, 2000);
+		gpiod_set_value_cansleep(sensor->reset_gpio, 0);  /* Deassert reset */
+		usleep_range(1000, 2000);
+	}
+
+	/* Initialize sensor registers */
 	for (cnt = 0; cnt < ARRAY_SIZE(initial_regs); cnt++) {
 		ret = ar1335_write_regs(sensor, initial_regs[cnt].data,
 					initial_regs[cnt].count);
@@ -1030,27 +1053,36 @@ static int ar1335_power_on(struct device *dev)
 			goto off;
 	}
 
+	/* Configure MIPI */
 	ret = ar1335_write_reg(sensor, AR1335_REG_SERIAL_FORMAT,
-			       AR1335_REG_SERIAL_FORMAT_MIPI |
-			       sensor->lane_count);
+				AR1335_REG_SERIAL_FORMAT_MIPI | sensor->lane_count);
 	if (ret)
 		goto off;
 
-	/* set MIPI test mode - disabled for now */
+	/* Set MIPI test mode */
 	ret = ar1335_write_reg(sensor, AR1335_REG_HISPI_TEST_MODE,
-			       ((0x40 << sensor->lane_count) - 0x40) |
-			       AR1335_REG_HISPI_TEST_MODE_LP11);
+				((0x40 << sensor->lane_count) - 0x40) |
+				AR1335_REG_HISPI_TEST_MODE_LP11);
 	if (ret)
 		goto off;
 
-	ret = ar1335_write_reg(sensor, AR1335_REG_ROW_SPEED, 0x110 |
-			       4 / sensor->lane_count);
+	ret = ar1335_write_reg(sensor, AR1335_REG_ROW_SPEED, 
+				0x110 | 4 / sensor->lane_count);
 	if (ret)
 		goto off;
 
 	return 0;
+
 off:
 	ar1335_power_off(dev);
+	return ret;
+
+disable_supplies:
+	/* Only disable supplies if we failed before enabling clock */
+	for (cnt = 0; cnt < ARRAY_SIZE(ar1335_supply_names); cnt++) {
+		if (sensor->supplies[cnt])
+			regulator_disable(sensor->supplies[cnt]);
+	}
 	return ret;
 }
 
@@ -1274,18 +1306,25 @@ static int ar1335_probe(struct i2c_client *client)
 	sensor->sd.flags = V4L2_SUBDEV_FL_HAS_DEVNODE;
 	sensor->pad.flags = MEDIA_PAD_FL_SOURCE;
 	sensor->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
+
 	ret = media_entity_pads_init(&sensor->sd.entity, 1, &sensor->pad);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "Failed to init media entity pads: %d\n", ret);
 		return ret;
+	}
 
-	for (cnt = 0; cnt < ARRAY_SIZE(ar1335_supply_names); cnt++) {
-		struct regulator *supply = devm_regulator_get(dev,
+	/* Get power supplies */
+	for (int cnt = 0; cnt < ARRAY_SIZE(ar1335_supply_names); cnt++) {
+		struct regulator *supply = devm_regulator_get_optional(dev,
 						ar1335_supply_names[cnt]);
-
 		if (IS_ERR(supply)) {
-			dev_info(dev, "no %s regulator found: %li\n",
-				 ar1335_supply_names[cnt], PTR_ERR(supply));
-			return PTR_ERR(supply);
+			if (PTR_ERR(supply) == -EPROBE_DEFER) {
+				ret = -EPROBE_DEFER;
+				goto entity_cleanup;
+			}
+			dev_info(dev, "no %s regulator found, using dummy\n",
+				ar1335_supply_names[cnt]);
+			supply = NULL;
 		}
 		sensor->supplies[cnt] = supply;
 	}
@@ -1293,23 +1332,31 @@ static int ar1335_probe(struct i2c_client *client)
 	mutex_init(&sensor->lock);
 
 	ret = ar1335_init_controls(sensor);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "Failed to init controls: %d\n", ret);
 		goto entity_cleanup;
+	}
 
 	ar1335_adj_fmt(&sensor->fmt);
 
 	ret = v4l2_async_register_subdev(&sensor->sd);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "Failed to register async subdev: %d\n", ret);
 		goto free_ctrls;
+	}
+
+	/* Power on and initialize sensor */
 	ret = ar1335_power_on(&client->dev);
-	if (ret)
+	if (ret) {
+		dev_err(dev, "Failed to power on sensor: %d\n", ret);
 		goto disable;
+	}
+
 	dev_info(&client->dev, "AR1335 probe completed successfully\n");
 	return 0;
 
 disable:
 	v4l2_async_unregister_subdev(&sensor->sd);
-	media_entity_cleanup(&sensor->sd.entity);
 free_ctrls:
 	v4l2_ctrl_handler_free(&sensor->ctrls.handler);
 entity_cleanup:
@@ -1330,7 +1377,7 @@ static void ar1335_remove(struct i2c_client *client)
 }
 
 static const struct of_device_id ar1335_id[] = {
-	{.compatible = AR1335_NAME },
+	{.compatible = "onsemi,ar1335" },
 	{}
 };
 MODULE_DEVICE_TABLE(of, ar1335_id);
