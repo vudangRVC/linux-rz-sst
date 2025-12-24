@@ -867,7 +867,7 @@
 			ar1335_to_csi22: endpoint {
 				clock-lanes = <0>;
 				data-lanes  = <1 2 3 4>;
-				remote-endpoint = <&csi22_in>;     /* matches your CSI22 side */
+				remote-endpoint = <&csi22_in>;
 			};
 		};
 	};
@@ -878,38 +878,28 @@
 	pinctrl-0 = <&i2c7_pins>;
 	pinctrl-names = "default";
 	clock-frequency = <400000>;
-
 	status = "okay";
 
-	ap1302_csi23: ap1302_csi23@3d {
-		compatible = "onnn,ap1302";
-		reg = <0x3d>;
-
-		clock-names = "csi_mclk";
+	ar1335_csi23: camera@36 {
+		compatible = "onsemi,ar1335";
+		reg = <0x36>;
 		clocks = <&clk_ext_camera>;
+		clock-names = "extclk";
 
-		reset-gpios = <&cam_gpio 11 GPIO_ACTIVE_LOW>;
-		power-gpios = <&cam_gpio 3 GPIO_ACTIVE_LOW>;
-		standby-gpios = <&cam_gpio 4 GPIO_ACTIVE_HIGH>;
+		vdd-supply = <&vdd4g_0p8>;        /* Core 0.8V supply */
+		vdd_io-supply = <&vdd5g_1p8>;     /* I/O 1.8V supply */
+		vaa-supply = <&vdd5g_1p8>;
+
+		reset-gpios = <&cam_gpio 11 GPIO_ACTIVE_LOW>;   /* CCM2_RST */
+		power-gpios = <&cam_gpio 3 GPIO_ACTIVE_LOW>;    /* CCM2_PWR_DIS */
 
 		port {
-			ap1302_to_csi23: endpoint {
+			ar1335_to_csi23: endpoint {
 				clock-lanes = <0>;
-				data-lanes = <1 2 3 4>;
+				data-lanes  = <1 2 3 4>;
 				remote-endpoint = <&csi23_in>;
 			};
 		};
-
-		sensors {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			onnn,model = "onnn,ar1335";
-
-			sensor@0 {
-				reg = <0>;
-			};
-		};		
 	};
 #endif
 };
@@ -981,7 +971,27 @@
 
 		port@1 {
 			csi22_out: endpoint {
-				remote-endpoint = <&cru_in>;
+				remote-endpoint = <&cru22_in>;
+			};
+		};
+	};
+};
+
+&csi23 {
+	status = "okay";
+
+	ports {
+		port@0 {
+			csi23_in: endpoint {
+				clock-lanes = <0>;
+				data-lanes  = <1 2 3 4>;
+				remote-endpoint = <&ar1335_to_csi23>;
+			};
+		};
+
+		port@1 {
+			csi23_out: endpoint {
+				remote-endpoint = <&cru23_in>;
 			};
 		};
 	};
@@ -992,23 +1002,21 @@
 
 	ports {
 		port@0 {
-			cru_in: endpoint {
+			cru22_in: endpoint {
 				remote-endpoint = <&csi22_out>;
 			};
 		};
 	};
 };
 
-&csi23 {
+&cru3 {
 	status = "okay";
 
 	ports {
-		port {
-		csi23_in: endpoint {
-			clock-lanes = <0>;
-			data-lanes = <1 2 3 4>;
-			remote-endpoint = <&ap1302_to_csi23>;
-		};
+		port@0 {
+			cru23_in: endpoint {
+				remote-endpoint = <&csi23_out>;
+			};
 		};
 	};
 };
