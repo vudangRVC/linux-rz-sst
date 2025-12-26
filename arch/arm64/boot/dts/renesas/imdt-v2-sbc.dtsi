@@ -625,37 +625,7 @@
 	pinctrl-names = "default";
 	clock-frequency = <400000>;
 
-	status = "okay";
-
-	ap1302_csi20: ap1302_csi20@3c {
-		compatible = "onnn,ap1302";
-		reg = <0x3c>;
-
-		clock-names = "csi_mclk";
-		clocks = <&clk_ext_camera>;
-
-		reset-gpios = <&cam_gpio 8 GPIO_ACTIVE_LOW>;
-		power-gpios = <&cam_gpio 0 GPIO_ACTIVE_LOW>;
-
-		port {
-			ap1302_to_csi20: endpoint {
-				clock-lanes = <0>;
-				data-lanes = <1 2 3 4>;
-				remote-endpoint = <&csi20_in>;
-			};
-		};
-
-		sensors {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			onnn,model = "onnn,ar1335";
-
-			sensor@0 {
-				reg = <0>;
-			};
-		};		
-	};
+	status = "disabled";
 };
 
 &i2c1 {
@@ -663,37 +633,7 @@
 	pinctrl-names = "default";
 	clock-frequency = <400000>;
 
-	status = "okay";
-
-	ap1302_csi21: ap1302_csi21@3d {
-		compatible = "onnn,ap1302";
-		reg = <0x3d>;
-
-		clock-names = "csi_mclk";
-		clocks = <&clk_ext_camera>;
-
-		reset-gpios = <&cam_gpio 9 GPIO_ACTIVE_LOW>;
-		power-gpios = <&cam_gpio 1 GPIO_ACTIVE_LOW>;
-
-		port {
-			ap1302_to_csi21: endpoint {
-				clock-lanes = <0>;
-				data-lanes = <1 2 3 4>;
-				remote-endpoint = <&csi21_in>;
-			};
-		};
-
-		sensors {
-			#address-cells = <1>;
-			#size-cells = <0>;
-
-			onnn,model = "onnn,ar1335";
-
-			sensor@0 {
-				reg = <0>;
-			};
-		};		
-	};
+	status = "disabled";
 };
 
 &i2c2 {
@@ -746,11 +686,11 @@
 		// TODO: define GPIO hogs and Interrupt GPIO
 		// interrupt-parent = <&pinctrl>;
 		// interrupts = <RZV2H_GPIO(8, 7) IRQ_TYPE_LEVEL_LOW>;
-		//isp-stby-hog {
-		//	gpio-hog;
-		//	gpios = <4 GPIO_ACTIVE_HIGH>;
-		//	output-low;
-		//};
+		isp-stby-hog {
+			gpio-hog;
+			gpios = <4 GPIO_ACTIVE_HIGH>;
+			output-low;
+		};
 
 		// TODO - Expose ISP_CAM_TRIG?
 	};
@@ -848,29 +788,8 @@
 	pinctrl-0 = <&i2c6_pins>;
 	pinctrl-names = "default";
 	clock-frequency = <400000>;
-	status = "okay";
 
-	ar1335_csi22: camera@36 {
-		compatible = "onsemi,ar1335";
-		reg = <0x36>;
-		clocks = <&clk_ext_camera>;
-		clock-names = "extclk";
-
-		vdd-supply = <&vdd4g_0p8>;        /* Core 0.8V supply */
-		vdd_io-supply = <&vdd5g_1p8>;     /* I/O 1.8V supply */
-		vaa-supply = <&vdd5g_1p8>;
-
-		reset-gpios = <&cam_gpio 10 GPIO_ACTIVE_LOW>;   /* CCM1_RST */
-		power-gpios = <&cam_gpio 2 GPIO_ACTIVE_LOW>;    /* CCM1_PWR_DIS */
-
-		port {
-			ar1335_to_csi22: endpoint {
-				clock-lanes = <0>;
-				data-lanes  = <1 2 3 4>;
-				remote-endpoint = <&csi22_in>;
-			};
-		};
-	};
+	status = "disabled";
 };
 
 &i2c7 {
@@ -878,29 +797,8 @@
 	pinctrl-0 = <&i2c7_pins>;
 	pinctrl-names = "default";
 	clock-frequency = <400000>;
-	status = "okay";
 
-	ar1335_csi23: camera@36 {
-		compatible = "onsemi,ar1335";
-		reg = <0x36>;
-		clocks = <&clk_ext_camera>;
-		clock-names = "extclk";
-
-		vdd-supply = <&vdd4g_0p8>;        /* Core 0.8V supply */
-		vdd_io-supply = <&vdd5g_1p8>;     /* I/O 1.8V supply */
-		vaa-supply = <&vdd5g_1p8>;
-
-		reset-gpios = <&cam_gpio 11 GPIO_ACTIVE_LOW>;   /* CCM2_RST */
-		power-gpios = <&cam_gpio 3 GPIO_ACTIVE_LOW>;    /* CCM2_PWR_DIS */
-
-		port {
-			ar1335_to_csi23: endpoint {
-				clock-lanes = <0>;
-				data-lanes  = <1 2 3 4>;
-				remote-endpoint = <&csi23_in>;
-			};
-		};
-	};
+	status = "disabled";
 #endif
 };
 
@@ -922,103 +820,35 @@
 };
 
 &cru0 {
-	status = "okay";
-};
-
-&csi20 {
-	status = "okay";
-
-	ports {
-		port {
-		csi20_in: endpoint {
-			clock-lanes = <0>;
-			data-lanes = <1 2 3 4>;
-			remote-endpoint = <&ap1302_to_csi20>;
-		};
-		};
-	};
+	status = "disabled";
 };
 
 &cru1 {
-	status = "okay";
+	status = "disabled";
 };
 
-&csi21 {
-	status = "okay";
-
-	ports {
-		port {
-		csi21_in: endpoint {
-			clock-lanes = <0>;
-			data-lanes = <1 2 3 4>;
-			remote-endpoint = <&ap1302_to_csi21>;
-		};
-		};
-	};
-};
-
-&csi22 {
-	status = "okay";
-
-	ports {
-		port@0 {
-			csi22_in: endpoint {
-				clock-lanes = <0>;
-				data-lanes  = <1 2 3 4>;
-				remote-endpoint = <&ar1335_to_csi22>;
-			};
-		};
-
-		port@1 {
-			csi22_out: endpoint {
-				remote-endpoint = <&cru22_in>;
-			};
-		};
-	};
-};
-
-&csi23 {
-	status = "okay";
-
-	ports {
-		port@0 {
-			csi23_in: endpoint {
-				clock-lanes = <0>;
-				data-lanes  = <1 2 3 4>;
-				remote-endpoint = <&ar1335_to_csi23>;
-			};
-		};
-
-		port@1 {
-			csi23_out: endpoint {
-				remote-endpoint = <&cru23_in>;
-			};
-		};
-	};
+&csi20 {
+	status = "disabled";
 };
 
 &cru2 {
-	status = "okay";
-
-	ports {
-		port@0 {
-			cru22_in: endpoint {
-				remote-endpoint = <&csi22_out>;
-			};
-		};
-	};
+	status = "disabled";
 };
 
 &cru3 {
-	status = "okay";
+	status = "disabled";
+};
 
-	ports {
-		port@0 {
-			cru23_in: endpoint {
-				remote-endpoint = <&csi23_out>;
-			};
-		};
-	};
+&csi21 {
+	status = "disabled";
+};
+
+&csi22 {
+	status = "disabled";
+};
+
+&csi23 {
+	status = "disabled";
 };
 
 &xhci0 {

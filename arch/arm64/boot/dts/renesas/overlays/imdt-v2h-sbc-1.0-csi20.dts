@@ -1,0 +1,74 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	compatible = "renesas,r9a09g057h4", "renesas,r9a09g057";
+	
+	// Enable CRU0 controller
+	fragment@0 {
+		target = <&cru0>;
+		__overlay__ {
+			status = "okay";
+		};
+	};
+
+	// Enable CSI20 controller
+	fragment@1 {
+		target = <&csi20>;
+		__overlay__ {
+			status = "okay";
+			ports {
+				port {
+					csi20_in: endpoint {
+						clock-lanes = <0>;
+						data-lanes = <1 2 3 4>;
+						remote-endpoint = <&ap1302_to_csi20>;
+					};
+				};
+			};
+		};
+	};
+
+	// Enable I2C0 and add AP1302 ISP
+	fragment@2 {
+		target = <&i2c0>;
+		__overlay__ {
+			pinctrl-0 = <&i2c0_pins>;
+			pinctrl-names = "default";
+			clock-frequency = <400000>;
+			status = "okay";
+			
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ap1302_csi20: ap1302_csi20@3c {
+				compatible = "onnn,ap1302";
+				reg = <0x3c>;
+				clock-names = "csi_mclk";
+				clocks = <&clk_ext_camera>;
+				reset-gpios = <&cam_gpio 8 GPIO_ACTIVE_LOW>;
+				power-gpios = <&cam_gpio 0 GPIO_ACTIVE_LOW>;
+
+				port {
+					ap1302_to_csi20: endpoint {
+						clock-lanes = <0>;
+						data-lanes = <1 2 3 4>;
+						remote-endpoint = <&csi20_in>;
+					};
+				};
+
+				sensors {
+					#address-cells = <1>;
+					#size-cells = <0>;
+					onnn,model = "onnn,ar1335";
+					
+					sensor@0 {
+						reg = <0>;
+					};
+				};
+			};
+		};
+	};
+};

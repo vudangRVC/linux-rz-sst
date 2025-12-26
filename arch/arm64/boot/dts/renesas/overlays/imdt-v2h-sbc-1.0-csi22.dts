@@ -1,0 +1,54 @@
+/dts-v1/;
+/plugin/;
+
+/ {
+	compatible = "renesas,r9a09g057h4", "renesas,r9a09g057";
+	
+	// Enable CSI22 controller
+	fragment@0 {
+		target = <&csi22>;
+		__overlay__ {
+			status = "okay";
+			ports {
+				port@0 {
+					csi22_in: endpoint {
+						clock-lanes = <0>;
+						data-lanes = <1 2 3 4>;
+						remote-endpoint = <&ar1335_to_csi22>;
+					};
+				};
+				port@1 {
+					csi22_out: endpoint {
+						remote-endpoint = <&cru22_in>;
+					};
+				};
+			};
+		};
+	};
+
+	// Enable CRU2 controller
+	fragment@1 {
+		target = <&cru2>;
+		__overlay__ {
+			status = "okay";
+			ports {
+				port@0 {
+					cru22_in: endpoint {
+						remote-endpoint = <&csi22_out>;
+					};
+				};
+			};
+		};
+	};
+
+	// Enable I2C6
+	fragment@2 {
+		target = <&i2c6>;
+		__overlay__ {
+			pinctrl-0 = <&i2c6_pins>;
+			pinctrl-names = "default";
+			clock-frequency = <400000>;
+			status = "okay";
+		};
+	};
+};

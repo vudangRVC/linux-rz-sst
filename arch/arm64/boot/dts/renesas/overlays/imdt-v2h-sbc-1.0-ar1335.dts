@@ -1,0 +1,98 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+/ {
+	compatible = "renesas,r9a09g057h4", "renesas,r9a09g057";
+	
+	// AR1335 for CSI20 (ISP path)
+	fragment@0 {
+		target = <&ap1302_csi20>;
+		__overlay__ {
+			sensors {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				onnn,model = "onnn,ar1335";
+
+				sensor@0 {
+					reg = <0>;
+				};
+			};
+		};
+	};
+
+	// AR1335 for CSI21 (ISP path)
+	fragment@1 {
+		target = <&ap1302_csi21>;
+		__overlay__ {
+			sensors {
+				#address-cells = <1>;
+				#size-cells = <0>;
+				onnn,model = "onnn,ar1335";
+
+				sensor@0 {
+					reg = <0>;
+				};
+			};
+		};
+	};
+
+	// AR1335 for CSI22 (Direct path)
+	fragment@2 {
+		target = <&i2c6>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ar1335_csi22: camera@36 {
+				compatible = "onsemi,ar1335";
+				reg = <0x36>;
+				clocks = <&clk_ext_camera>;
+				clock-names = "extclk";
+				vdd-supply = <&vdd4g_0p8>;        /* Core 0.8V supply */
+				vdd_io-supply = <&vdd5g_1p8>;     /* I/O 1.8V supply */
+				vaa-supply = <&vdd5g_1p8>;
+				reset-gpios = <&cam_gpio 10 GPIO_ACTIVE_LOW>;   /* CCM1_RST */
+				power-gpios = <&cam_gpio 2 GPIO_ACTIVE_LOW>;    /* CCM1_PWR_DIS */
+
+				port {
+					ar1335_to_csi22: endpoint {
+						clock-lanes = <0>;
+						data-lanes = <1 2 3 4>;
+						remote-endpoint = <&csi22_in>;
+					};
+				};
+			};
+		};
+	};
+
+	// AR1335 for CSI23 (Direct path)
+	fragment@3 {
+		target = <&i2c7>;
+		__overlay__ {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			ar1335_csi23: camera@36 {
+				compatible = "onsemi,ar1335";
+				reg = <0x36>;
+				clocks = <&clk_ext_camera>;
+				clock-names = "extclk";
+				vdd-supply = <&vdd4g_0p8>;        /* Core 0.8V supply */
+				vdd_io-supply = <&vdd5g_1p8>;     /* I/O 1.8V supply */
+				vaa-supply = <&vdd5g_1p8>;
+				reset-gpios = <&cam_gpio 11 GPIO_ACTIVE_LOW>;   /* CCM2_RST */
+				power-gpios = <&cam_gpio 3 GPIO_ACTIVE_LOW>;    /* CCM2_PWR_DIS */
+
+				port {
+					ar1335_to_csi23: endpoint {
+						clock-lanes = <0>;
+						data-lanes = <1 2 3 4>;
+						remote-endpoint = <&csi23_in>;
+					};
+				};
+			};
+		};
+	};
+};

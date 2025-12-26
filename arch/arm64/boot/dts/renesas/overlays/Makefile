@@ -19,3 +19,10 @@ dtb-y += rzv2h-rdk-1.0-can.dtbo
 dtb-y += rzv2h-rdk-1.0-ext-spi.dtbo
 dtb-y += rzv2h-rdk-1.0-audio-codec.dtbo
 dtb-y += rzv2h-rdk-1.0-audio-hdmi.dtbo
+
+# IMDT-V2H-SBC overlays
+dtb-y += imdt-v2h-sbc-1.0-ar1335.dtbo
+dtb-y += imdt-v2h-sbc-1.0-csi20.dtbo
+dtb-y += imdt-v2h-sbc-1.0-csi21.dtbo
+dtb-y += imdt-v2h-sbc-1.0-csi22.dtbo
+dtb-y += imdt-v2h-sbc-1.0-csi23.dtbo
