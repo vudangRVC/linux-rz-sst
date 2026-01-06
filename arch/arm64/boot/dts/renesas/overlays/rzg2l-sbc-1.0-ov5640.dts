@@ -13,3 +13,7 @@
 &ov5640 {
 	status = "okay";
 };
+
+&cru {
+	status = "okay";
+};
