@@ -29,9 +29,16 @@
 #include "../dmaengine.h"
 #include "../virt-dma.h"
 
+#include <linux/irqchip/icu-v2h.h>
+
 enum  rz_dmac_prep_type {
 	RZ_DMAC_DESC_MEMCPY,
 	RZ_DMAC_DESC_SLAVE_SG,
+};
+
+enum dmac_type {
+	RZ_COMMON_DMAC,
+	RZ_V2H_DMAC,
 };
 
 struct rz_lmdesc {
@@ -75,6 +82,8 @@ struct rz_dmac_chan {
 	u32 chcfg;
 	u32 chctrl;
 	int mid_rid;
+	int dmac_req;
+	int dmac_ack;
 
 	struct list_head ld_free;
 	struct list_head ld_queue;
@@ -102,9 +111,11 @@ struct rz_dmac {
 	struct reset_control *rstc;
 	void __iomem *base;
 	void __iomem *ext_base;
+	struct platform_device *icu_dev;
 
 	unsigned int n_channels;
 	struct rz_dmac_chan *channels;
+	enum dmac_type devtype;
 
 	bool has_icu;
 
@@ -118,10 +129,12 @@ struct rz_dmac {
  * Registers
  */
 
+#define CRTB				0x0020
 #define CHSTAT				0x0024
 #define CHCTRL				0x0028
 #define CHCFG				0x002c
 #define NXLA				0x0038
+#define CRLA				0x003C
 
 #define DCTRL				0x0000
 
@@ -144,9 +157,9 @@ struct rz_dmac {
 #define CHCTRL_CLREN			BIT(1)
 #define CHCTRL_SETEN			BIT(0)
 #define CHCTRL_DEFAULT			(CHCTRL_CLRINTMSK | CHCTRL_CLRSUS | \
-					 CHCTRL_CLRTC |	CHCTRL_CLREND | \
-					 CHCTRL_CLRRQ | CHCTRL_SWRST | \
-					 CHCTRL_CLREN)
+					CHCTRL_CLRTC |	CHCTRL_CLREND | \
+					CHCTRL_CLRRQ | CHCTRL_SWRST | \
+					CHCTRL_CLREN)
 
 #define CHCFG_DMS			BIT(31)
 #define CHCFG_DEM			BIT(24)
@@ -163,7 +176,9 @@ struct rz_dmac {
 #define CHCFG_FILL_HIEN(a)		(((a) & BIT(0)) << 5)
 
 #define MID_RID_MASK			GENMASK(9, 0)
+#define DMAC_REQ_MASK			GENMASK(9, 0)
 #define CHCFG_MASK			GENMASK(15, 10)
+#define DMAC_ACK_MASK			GENMASK(22, 16)
 #define CHCFG_DS_INVALID		0xFF
 #define DCTRL_LVINT			BIT(1)
 #define DCTRL_PR			BIT(0)
@@ -185,13 +200,13 @@ struct rz_dmac {
  */
 
 static void rz_dmac_writel(struct rz_dmac *dmac, unsigned int val,
-			   unsigned int offset)
+			unsigned int offset)
 {
 	writel(val, dmac->base + offset);
 }
 
 static void rz_dmac_ext_writel(struct rz_dmac *dmac, unsigned int val,
-			       unsigned int offset)
+				unsigned int offset)
 {
 	writel(val, dmac->ext_base + offset);
 }
@@ -202,7 +217,7 @@ static u32 rz_dmac_ext_readl(struct rz_dmac *dmac, unsigned int offset)
 }
 
 static void rz_dmac_ch_writel(struct rz_dmac_chan *channel, unsigned int val,
-			      unsigned int offset, int which)
+				unsigned int offset, int which)
 {
 	if (which)
 		writel(val, channel->ch_base + offset);
@@ -211,7 +226,7 @@ static void rz_dmac_ch_writel(struct rz_dmac_chan *channel, unsigned int val,
 }
 
 static u32 rz_dmac_ch_readl(struct rz_dmac_chan *channel,
-			    unsigned int offset, int which)
+				unsigned int offset, int which)
 {
 	if (which)
 		return readl(channel->ch_base + offset);
@@ -225,7 +240,7 @@ static u32 rz_dmac_ch_readl(struct rz_dmac_chan *channel,
  */
 
 static void rz_lmdesc_setup(struct rz_dmac_chan *channel,
-			    struct rz_lmdesc *lmdesc)
+				struct rz_lmdesc *lmdesc)
 {
 	u32 nxla;
 
@@ -279,7 +294,7 @@ static void rz_dmac_enable_hw(struct rz_dmac_chan *channel)
 
 	nxla = channel->lmdesc.base_dma +
 		(sizeof(struct rz_lmdesc) * (channel->lmdesc.head -
-					     channel->lmdesc.base));
+						channel->lmdesc.base));
 
 	chstat = rz_dmac_ch_readl(channel, CHSTAT, 1);
 	if (!(chstat & CHSTAT_EN)) {
@@ -396,9 +411,16 @@ static void rz_dmac_prepare_descs_for_slave_sg(struct rz_dmac_chan *channel)
 	if (dmac->has_icu) {
 		rzv2h_icu_register_dma_req(dmac->icu.pdev, dmac->icu.dmac_index,
 					   channel->index, channel->mid_rid);
-	} else {
+	} else if (dmac->devtype == RZ_V2H_DMAC) {
+		if (register_dmac_req_signal(dmac->icu_dev, dmac->dev->id,
+					channel->index, channel->dmac_req) < 0)
+			dev_info(dmac->dev, "%s: Register dmac req fail\n", __func__);
+		if (register_dmac_ack_signal(dmac->icu_dev, dmac->dev->id,
+					channel->dmac_ack, channel->index) < 0)
+			dev_info(dmac->dev, "%s: Register dmac ack fail\n", __func__);
+	} else
 		rz_dmac_set_dmars_register(dmac, channel->index, channel->mid_rid);
-	}
+
 
 	channel->chctrl = CHCTRL_SETEN;
 }
@@ -481,6 +503,16 @@ static void rz_dmac_free_chan_resources(struct dma_chan *chan)
 		channel->mid_rid = -EINVAL;
 	}
 
+	if (channel->dmac_req >= 0) {
+		clear_bit(channel->dmac_req, dmac->modules);
+		channel->dmac_req = 0x3FF;
+	}
+
+	if (channel->dmac_ack >= 0) {
+		clear_bit(channel->dmac_ack, dmac->modules);
+		channel->dmac_ack = 0X7F;
+	}
+
 	spin_unlock_irqrestore(&channel->vc.lock, flags);
 
 	list_for_each_entry_safe(desc, _desc, &channel->ld_free, node) {
@@ -520,9 +552,9 @@ rz_dmac_prep_dma_memcpy(struct dma_chan *chan, dma_addr_t dest, dma_addr_t src,
 
 static struct dma_async_tx_descriptor *
 rz_dmac_prep_slave_sg(struct dma_chan *chan, struct scatterlist *sgl,
-		      unsigned int sg_len,
-		      enum dma_transfer_direction direction,
-		      unsigned long flags, void *context)
+			unsigned int sg_len,
+			enum dma_transfer_direction direction,
+			unsigned long flags, void *context)
 {
 	struct rz_dmac_chan *channel = to_rz_dmac_chan(chan);
 	struct rz_dmac_desc *desc;
@@ -592,10 +624,10 @@ static void rz_dmac_issue_pending(struct dma_chan *chan)
 		if (vchan_issue_pending(&channel->vc)) {
 			if (rz_dmac_xfer_desc(channel) < 0)
 				dev_warn(dmac->dev, "ch: %d couldn't issue DMA xfer\n",
-					 channel->index);
+					channel->index);
 			else
 				list_move_tail(channel->ld_queue.next,
-					       &channel->ld_active);
+						&channel->ld_active);
 		}
 	}
 
@@ -625,30 +657,29 @@ static u8 rz_dmac_ds_to_val_mapping(enum dma_slave_buswidth ds)
 }
 
 static int rz_dmac_config(struct dma_chan *chan,
-			  struct dma_slave_config *config)
+			struct dma_slave_config *config)
 {
 	struct rz_dmac_chan *channel = to_rz_dmac_chan(chan);
 	u32 val;
 
-	channel->dst_per_address = config->dst_addr;
-	channel->chcfg &= ~CHCFG_FILL_DDS_MASK;
-	if (channel->dst_per_address) {
-		val = rz_dmac_ds_to_val_mapping(config->dst_addr_width);
-		if (val == CHCFG_DS_INVALID)
-			return -EINVAL;
-
-		channel->chcfg |= FIELD_PREP(CHCFG_FILL_DDS_MASK, val);
-	}
-
 	channel->src_per_address = config->src_addr;
-	channel->chcfg &= ~CHCFG_FILL_SDS_MASK;
-	if (channel->src_per_address) {
+	channel->dst_per_address = config->dst_addr;
+
+	if (config->direction == DMA_DEV_TO_MEM) {
 		val = rz_dmac_ds_to_val_mapping(config->src_addr_width);
 		if (val == CHCFG_DS_INVALID)
 			return -EINVAL;
 
+		channel->chcfg &= ~CHCFG_FILL_SDS_MASK;
 		channel->chcfg |= FIELD_PREP(CHCFG_FILL_SDS_MASK, val);
-	}
+		} else {
+			val = rz_dmac_ds_to_val_mapping(config->dst_addr_width);
+			if (val == CHCFG_DS_INVALID)
+				return -EINVAL;
+
+			channel->chcfg &= ~CHCFG_FILL_DDS_MASK;
+			channel->chcfg |= FIELD_PREP(CHCFG_FILL_DDS_MASK, val);
+		}
 
 	return 0;
 }
@@ -680,9 +711,188 @@ static void rz_dmac_device_synchronize(struct dma_chan *chan)
 		rzv2h_icu_register_dma_req(dmac->icu.pdev, dmac->icu.dmac_index,
 					   channel->index,
 					   RZV2H_ICU_DMAC_REQ_NO_DEFAULT);
-	} else {
+	} else if (dmac->devtype == RZ_V2H_DMAC) {
+		if (register_dmac_req_signal(dmac->icu_dev, dmac->dev->id,
+					channel->index, 0x3FF) < 0)
+			dev_info(dmac->dev, "%s: Unregister dmac req fail\n", __func__);
+		if (register_dmac_ack_signal(dmac->icu_dev, dmac->dev->id,
+					channel->dmac_ack, 0x7F) < 0)
+			dev_info(dmac->dev, "%s: Unregister dmac ack fail\n", __func__);
+	} else
 		rz_dmac_set_dmars_register(dmac, channel->index, 0);
+}
+
+static unsigned int calculate_total_byte_number_in_virtual_desc(struct rz_dmac_desc *desc)
+{
+	struct scatterlist *sg, *sgl = desc->sg;
+	unsigned int i, size, sg_len = desc->sgcount;
+
+	for (i = 0, size = 0, sg = sgl; i < sg_len; i++, sg = sg_next(sg))
+		size += sg_dma_len(sg);
+
+	return size;
+}
+
+static unsigned int calculate_residue_byte_number_in_virtual_desc(struct rz_dmac_chan *channel)
+{
+	struct rz_lmdesc *lmdesc = channel->lmdesc.head;
+	struct dma_chan *chan = &channel->vc.chan;
+	struct rz_dmac *dmac = to_rz_dmac(chan->device);
+	unsigned int residue = 0, i = 0;
+	unsigned int crla;
+
+	/* Searching for where is current lmdesc */
+	crla = rz_dmac_ch_readl(channel, CRLA, 1);
+
+	while (!(lmdesc->nxla == crla)) {
+		lmdesc++;
+		if (lmdesc >= (channel->lmdesc.base + DMAC_NR_LMDESC))
+			lmdesc = channel->lmdesc.base;
+		i++;
+		/* Not found current lmdesc */
+		if (i > DMAC_NR_LMDESC)
+			return 0;
 	}
+
+	/* Point to current processing lmdesc in hardware */
+	lmdesc++;
+	if (lmdesc >= (channel->lmdesc.base + DMAC_NR_LMDESC))
+		lmdesc = channel->lmdesc.base;
+
+	/* Calculate residue from next lmdesc to end of virtual desc*/
+	while (lmdesc->chcfg & CHCFG_DEM) {
+		lmdesc++;
+		if (lmdesc >= (channel->lmdesc.base + DMAC_NR_LMDESC))
+			lmdesc = channel->lmdesc.base;
+		residue += lmdesc->tb;
+	}
+
+	dev_dbg(dmac->dev, "%s: Getting residue is %d\n", __func__, residue);
+
+	return residue;
+}
+
+static unsigned int rz_dmac_chan_get_residue(struct rz_dmac_chan *channel,
+						dma_cookie_t cookie)
+{
+	struct rz_dmac_desc *current_desc, *desc;
+	enum dma_status status;
+	unsigned int residue = 0;
+	unsigned int crla;
+	unsigned int crtb;
+	unsigned int i;
+
+	/* Get current processing virtual descriptor */
+	current_desc = list_first_entry(&channel->ld_active, struct rz_dmac_desc, node);
+	if (!current_desc)
+		return 0;
+
+	/*
+	 * If the cookie corresponds to a descriptor that has been completed
+	 * there is no residue. The same check has already been performed by the
+	 * caller but without holding the channel lock, so the descriptor could
+	 * now be complete.
+	 */
+	status = dma_cookie_status(&channel->vc.chan, cookie, NULL);
+	if (status == DMA_COMPLETE)
+		return 0;
+
+	/*
+	 * If the cookie doesn't correspond to the currently processing virtual descriptor
+	 * then the descriptor hasn't been processed yet, and the residue is
+	 * equal to the full descriptor size.
+	 * Also, a client driver is possible to call this function before
+	 * rz_dmac_irq_handler_thread() runs. In this case, the running descriptor
+	 * will be the next descriptor, and the done list will appear. So, if
+	 * the argument cookie matches the done list's cookie, we can assume
+	 * the residue is zero.
+	 */
+
+	if (cookie != current_desc->vd.tx.cookie) {
+		list_for_each_entry(desc, &channel->ld_free, node) {
+			if (cookie == desc->vd.tx.cookie)
+				return 0;
+		}
+
+		list_for_each_entry(desc, &channel->ld_queue, node) {
+			if (cookie == desc->vd.tx.cookie)
+				return calculate_total_byte_number_in_virtual_desc(desc);
+		}
+
+		list_for_each_entry(desc, &channel->ld_active, node) {
+			if (cookie == desc->vd.tx.cookie)
+				return calculate_total_byte_number_in_virtual_desc(desc);
+		}
+
+		/*
+		 * No descriptor found for the cookie, there's thus no residue.
+		 * This shouldn't happen if the calling driver passes a correct
+		 * cookie value.
+		 */
+		WARN(1, "No descriptor for cookie!");
+		return 0;
+	}
+
+	/*
+	 * Correspond to the currently processing virtual descriptor
+	 *
+	 * Make sure the hardware does not move to next lmdesc
+	 * while reading the counter.
+	 * Trying it 3 times should be enough: Initial read, retry, retry
+	 * for the paranoid.
+	 * The current lmdesc running in hardware is channel.lmdesc.head
+	 */
+
+	for (i = 0; i < 3; i++) {
+		crla = rz_dmac_ch_readl(channel, CRLA, 1);
+		crtb = rz_dmac_ch_readl(channel, CRTB, 1);
+		/* Still the same? */
+		if (crla == rz_dmac_ch_readl(channel, CRLA, 1))
+			break;
+	}
+	WARN_ONCE(i >= 3, "residue might be not continuous!");
+
+	/* Calculate number of byte transferred in processing virtual descriptor */
+	/* One virtual descriptor can have many lmdesc */
+
+	residue += calculate_residue_byte_number_in_virtual_desc(channel);
+	residue += crtb;
+
+	return residue;
+}
+
+static enum dma_status rz_dmac_tx_status(struct dma_chan *chan,
+	dma_cookie_t cookie, struct dma_tx_state *txstate)
+{
+	struct rz_dmac_chan *channel = to_rz_dmac_chan(chan);
+	enum dma_status status;
+	unsigned long flags;
+	unsigned int residue;
+
+	status = dma_cookie_status(chan, cookie, txstate);
+	if (status == DMA_COMPLETE || !txstate)
+		return status;
+
+	spin_lock_irqsave(&channel->vc.lock, flags);
+	residue = rz_dmac_chan_get_residue(channel, cookie);
+	spin_unlock_irqrestore(&channel->vc.lock, flags);
+
+	/* if there's no residue, the cookie is complete */
+	if (!residue)
+		return DMA_COMPLETE;
+
+	dma_set_residue(txstate, residue);
+
+	return status;
+}
+
+static int rz_dmac_device_pause(struct dma_chan *chan)
+{
+	struct rz_dmac_chan *channel = to_rz_dmac_chan(chan);
+	struct rz_dmac *dmac = to_rz_dmac(chan->device);
+
+	rz_dmac_set_dmars_register(dmac, channel->index, 0);
+	return 0;
 }
 
 /*
@@ -763,16 +973,23 @@ static bool rz_dmac_chan_filter(struct dma_chan *chan, void *arg)
 	struct of_phandle_args *dma_spec = arg;
 	u32 ch_cfg;
 
-	channel->mid_rid = dma_spec->args[0] & MID_RID_MASK;
+	if (dmac->devtype == RZ_V2H_DMAC) {
+		channel->dmac_req = dma_spec->args[0] & DMAC_REQ_MASK;
+		channel->dmac_ack = (dma_spec->args[0] & DMAC_ACK_MASK) >> 16;
+	} else
+		channel->mid_rid = dma_spec->args[0] & MID_RID_MASK;
 	ch_cfg = (dma_spec->args[0] & CHCFG_MASK) >> 10;
 	channel->chcfg = CHCFG_FILL_TM(ch_cfg) | CHCFG_FILL_AM(ch_cfg) |
-			 CHCFG_FILL_LVL(ch_cfg) | CHCFG_FILL_HIEN(ch_cfg);
+			CHCFG_FILL_LVL(ch_cfg) | CHCFG_FILL_HIEN(ch_cfg);
 
-	return !test_and_set_bit(channel->mid_rid, dmac->modules);
+	if (dmac->devtype == RZ_COMMON_DMAC)
+		return !test_and_set_bit(channel->mid_rid, dmac->modules);
+	else
+		return !test_and_set_bit(channel->dmac_req, dmac->modules);
 }
 
 static struct dma_chan *rz_dmac_of_xlate(struct of_phandle_args *dma_spec,
-					 struct of_dma *ofdma)
+					struct of_dma *ofdma)
 {
 	dma_cap_mask_t mask;
 
@@ -793,8 +1010,8 @@ static struct dma_chan *rz_dmac_of_xlate(struct of_phandle_args *dma_spec,
  */
 
 static int rz_dmac_chan_probe(struct rz_dmac *dmac,
-			      struct rz_dmac_chan *channel,
-			      u8 index)
+				struct rz_dmac_chan *channel,
+				u8 index)
 {
 	struct platform_device *pdev = to_platform_device(dmac->dev);
 	struct rz_lmdesc *lmdesc;
@@ -804,6 +1021,8 @@ static int rz_dmac_chan_probe(struct rz_dmac *dmac,
 
 	channel->index = index;
 	channel->mid_rid = -EINVAL;
+	channel->dmac_req = 0x3FF;
+	channel->dmac_ack = 0x7F;
 
 	/* Request the channel interrupt. */
 	scnprintf(pdev_irqname, sizeof(pdev_irqname), "ch%u", index);
@@ -812,7 +1031,7 @@ static int rz_dmac_chan_probe(struct rz_dmac *dmac,
 		return channel->irq;
 
 	irqname = devm_kasprintf(dmac->dev, GFP_KERNEL, "%s:%u",
-				 dev_name(dmac->dev), index);
+				dev_name(dmac->dev), index);
 	if (!irqname)
 		return -ENOMEM;
 
@@ -839,8 +1058,8 @@ static int rz_dmac_chan_probe(struct rz_dmac *dmac,
 
 	/* Allocate descriptors */
 	lmdesc = dma_alloc_coherent(&pdev->dev,
-				    sizeof(struct rz_lmdesc) * DMAC_NR_LMDESC,
-				    &channel->lmdesc.base_dma, GFP_KERNEL);
+					sizeof(struct rz_lmdesc) * DMAC_NR_LMDESC,
+					&channel->lmdesc.base_dma, GFP_KERNEL);
 	if (!lmdesc) {
 		dev_err(&pdev->dev, "Can't allocate memory (lmdesc)\n");
 		return -ENOMEM;
@@ -926,6 +1145,9 @@ static int rz_dmac_probe(struct platform_device *pdev)
 	const char *irqname = "error";
 	struct dma_device *engine;
 	struct rz_dmac *dmac;
+	struct device_node *np = pdev->dev.of_node;
+	struct device_node *icu_np;
+	struct platform_device *icu_dev_np;
 	int channel_num;
 	int ret;
 	int irq;
@@ -942,8 +1164,10 @@ static int rz_dmac_probe(struct platform_device *pdev)
 	if (ret < 0)
 		return ret;
 
+	dmac->devtype = (enum dmac_type)of_device_get_match_data(&pdev->dev);
+
 	dmac->channels = devm_kcalloc(&pdev->dev, dmac->n_channels,
-				      sizeof(*dmac->channels), GFP_KERNEL);
+					sizeof(*dmac->channels), GFP_KERNEL);
 	if (!dmac->channels)
 		return -ENOMEM;
 
@@ -952,7 +1176,9 @@ static int rz_dmac_probe(struct platform_device *pdev)
 	if (IS_ERR(dmac->base))
 		return PTR_ERR(dmac->base);
 
-	if (!dmac->has_icu) {
+	/* Map ext_base (DMARS) only if the type is RZ_COMMON_DMAC or V2H without having ICU */
+	if (dmac->devtype == RZ_COMMON_DMAC || 
+	   (dmac->devtype == RZ_V2H_DMAC && !dmac->has_icu)) {
 		dmac->ext_base = devm_platform_ioremap_resource(pdev, 1);
 		if (IS_ERR(dmac->ext_base))
 			return PTR_ERR(dmac->ext_base);
@@ -964,7 +1190,7 @@ static int rz_dmac_probe(struct platform_device *pdev)
 		return irq;
 
 	ret = devm_request_irq(&pdev->dev, irq, rz_dmac_irq_handler, 0,
-			       irqname, NULL);
+				irqname, NULL);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to request IRQ %u (%d)\n",
 			irq, ret);
@@ -977,7 +1203,7 @@ static int rz_dmac_probe(struct platform_device *pdev)
 	dmac->rstc = devm_reset_control_array_get_optional_exclusive(&pdev->dev);
 	if (IS_ERR(dmac->rstc))
 		return dev_err_probe(&pdev->dev, PTR_ERR(dmac->rstc),
-				     "failed to get resets\n");
+					"failed to get resets\n");
 
 	pm_runtime_enable(&pdev->dev);
 	ret = pm_runtime_resume_and_get(&pdev->dev);
@@ -998,7 +1224,7 @@ static int rz_dmac_probe(struct platform_device *pdev)
 
 	/* Register the DMAC as a DMA provider for DT. */
 	ret = of_dma_controller_register(pdev->dev.of_node, rz_dmac_of_xlate,
-					 NULL);
+					NULL);
 	if (ret < 0)
 		goto err;
 
@@ -1013,22 +1239,49 @@ static int rz_dmac_probe(struct platform_device *pdev)
 
 	engine->device_alloc_chan_resources = rz_dmac_alloc_chan_resources;
 	engine->device_free_chan_resources = rz_dmac_free_chan_resources;
-	engine->device_tx_status = dma_cookie_status;
+	engine->device_tx_status = rz_dmac_tx_status;
 	engine->device_prep_slave_sg = rz_dmac_prep_slave_sg;
 	engine->device_prep_dma_memcpy = rz_dmac_prep_dma_memcpy;
 	engine->device_config = rz_dmac_config;
 	engine->device_terminate_all = rz_dmac_terminate_all;
 	engine->device_issue_pending = rz_dmac_issue_pending;
 	engine->device_synchronize = rz_dmac_device_synchronize;
+	engine->device_pause = rz_dmac_device_pause;
 
 	engine->copy_align = DMAENGINE_ALIGN_1_BYTE;
-	dma_set_max_seg_size(engine->dev, U32_MAX);
+	dma_set_max_seg_size(engine->dev, U32_MAX - 1);
 
 	ret = dma_async_device_register(engine);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "unable to register\n");
 		goto dma_register_err;
 	}
+
+	if (dmac->devtype == RZ_V2H_DMAC) {
+		ret = of_property_read_u32_index(np, "peripheral-request", 1, &dmac->dev->id);
+		if (ret < 0) {
+			ret = of_property_read_u32_index(np, "renesas,icu", 1, &dmac->dev->id);
+		}
+
+		if (ret < 0) {
+			dev_warn(&pdev->dev, "No DMA request signal found in DT, using default ID\n");
+			// return -EINVAL;
+		} else {
+			icu_np = of_parse_phandle(np, "peripheral-request", 0);
+			if (!icu_np)
+				icu_np = of_parse_phandle(np, "renesas,icu", 0);
+
+			if (icu_np) {
+				icu_dev_np = of_find_device_by_node(icu_np);
+				if (icu_dev_np) {
+					dmac->icu_dev = icu_dev_np;
+					dev_dbg(&pdev->dev, "DMAC using %s\n", dmac->icu_dev->name);
+				} else
+					dev_dbg(&pdev->dev, "DMAC not relate ICU\n");
+			}
+		}
+	}
+
 	return 0;
 
 dma_register_err:
@@ -1039,9 +1292,9 @@ err:
 		struct rz_dmac_chan *channel = &dmac->channels[i];
 
 		dma_free_coherent(&pdev->dev,
-				  sizeof(struct rz_lmdesc) * DMAC_NR_LMDESC,
-				  channel->lmdesc.base,
-				  channel->lmdesc.base_dma);
+				sizeof(struct rz_lmdesc) * DMAC_NR_LMDESC,
+				channel->lmdesc.base,
+				channel->lmdesc.base_dma);
 	}
 
 	reset_control_assert(dmac->rstc);
@@ -1064,9 +1317,9 @@ static void rz_dmac_remove(struct platform_device *pdev)
 		struct rz_dmac_chan *channel = &dmac->channels[i];
 
 		dma_free_coherent(&pdev->dev,
-				  sizeof(struct rz_lmdesc) * DMAC_NR_LMDESC,
-				  channel->lmdesc.base,
-				  channel->lmdesc.base_dma);
+				sizeof(struct rz_lmdesc) * DMAC_NR_LMDESC,
+				channel->lmdesc.base,
+				channel->lmdesc.base_dma);
 	}
 	reset_control_assert(dmac->rstc);
 	pm_runtime_put(&pdev->dev);
@@ -1074,8 +1327,9 @@ static void rz_dmac_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id of_rz_dmac_match[] = {
-	{ .compatible = "renesas,r9a09g057-dmac", },
-	{ .compatible = "renesas,rz-dmac", },
+	{ .compatible = "renesas,rz-dmac", .data = (void *)RZ_COMMON_DMAC },
+	{ .compatible = "renesas,r9a09g057-dmac", .data = (void *)RZ_V2H_DMAC },
+	{ .compatible = "renesas,r9a09g047-dmac", .data = (void *)RZ_V2H_DMAC },
 	{ /* Sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, of_rz_dmac_match);
