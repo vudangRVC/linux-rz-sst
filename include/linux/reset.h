@@ -6,6 +6,7 @@
 #include <linux/err.h>
 #include <linux/errno.h>
 #include <linux/types.h>
+#include <linux/bitops.h>
 
 struct device;
 struct device_node;
