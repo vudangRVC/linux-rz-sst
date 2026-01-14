@@ -50,15 +50,15 @@ static int sh_pfc_get_groups_count(struct pinctrl_dev *pctldev)
 }
 
 static const char *sh_pfc_get_group_name(struct pinctrl_dev *pctldev,
-					 unsigned selector)
+					 unsigned int selector)
 {
 	struct sh_pfc_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
 
 	return pmx->pfc->info->groups[selector].name;
 }
 
-static int sh_pfc_get_group_pins(struct pinctrl_dev *pctldev, unsigned selector,
-				 const unsigned **pins, unsigned *num_pins)
+static int sh_pfc_get_group_pins(struct pinctrl_dev *pctldev, unsigned int selector,
+				 const unsigned int **pins, unsigned int *num_pins)
 {
 	struct sh_pfc_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
 
@@ -69,7 +69,7 @@ static int sh_pfc_get_group_pins(struct pinctrl_dev *pctldev, unsigned selector,
 }
 
 static void sh_pfc_pin_dbg_show(struct pinctrl_dev *pctldev, struct seq_file *s,
-				unsigned offset)
+				unsigned int offset)
 {
 	seq_puts(s, DRV_NAME);
 }
@@ -218,7 +218,7 @@ done:
 }
 
 static void sh_pfc_dt_free_map(struct pinctrl_dev *pctldev,
-			       struct pinctrl_map *map, unsigned num_maps)
+			       struct pinctrl_map *map, unsigned int num_maps)
 {
 	unsigned int i;
 
@@ -236,7 +236,7 @@ static void sh_pfc_dt_free_map(struct pinctrl_dev *pctldev,
 
 static int sh_pfc_dt_node_to_map(struct pinctrl_dev *pctldev,
 				 struct device_node *np,
-				 struct pinctrl_map **map, unsigned *num_maps)
+				 struct pinctrl_map **map, unsigned int *num_maps)
 {
 	struct sh_pfc_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
 	struct device *dev = pmx->pfc->dev;
@@ -295,7 +295,7 @@ static int sh_pfc_get_functions_count(struct pinctrl_dev *pctldev)
 }
 
 static const char *sh_pfc_get_function_name(struct pinctrl_dev *pctldev,
-					    unsigned selector)
+					    unsigned int selector)
 {
 	struct sh_pfc_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
 
@@ -303,7 +303,7 @@ static const char *sh_pfc_get_function_name(struct pinctrl_dev *pctldev,
 }
 
 static int sh_pfc_get_function_groups(struct pinctrl_dev *pctldev,
-				      unsigned selector,
+				      unsigned int selector,
 				      const char * const **groups,
 				      unsigned * const num_groups)
 {
@@ -315,8 +315,8 @@ static int sh_pfc_get_function_groups(struct pinctrl_dev *pctldev,
 	return 0;
 }
 
-static int sh_pfc_func_set_mux(struct pinctrl_dev *pctldev, unsigned selector,
-			       unsigned group)
+static int sh_pfc_func_set_mux(struct pinctrl_dev *pctldev, unsigned int selector,
+			       unsigned int group)
 {
 	struct sh_pfc_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
 	struct sh_pfc *pfc = pmx->pfc;
@@ -362,7 +362,7 @@ done:
 
 static int sh_pfc_gpio_request_enable(struct pinctrl_dev *pctldev,
 				      struct pinctrl_gpio_range *range,
-				      unsigned offset)
+				      unsigned int offset)
 {
 	struct sh_pfc_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
 	struct sh_pfc *pfc = pmx->pfc;
@@ -396,7 +396,7 @@ done:
 
 static void sh_pfc_gpio_disable_free(struct pinctrl_dev *pctldev,
 				     struct pinctrl_gpio_range *range,
-				     unsigned offset)
+				     unsigned int offset)
 {
 	struct sh_pfc_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
 	struct sh_pfc *pfc = pmx->pfc;
@@ -415,7 +415,7 @@ static void sh_pfc_gpio_disable_free(struct pinctrl_dev *pctldev,
 #ifdef CONFIG_PINCTRL_SH_PFC_GPIO
 static int sh_pfc_gpio_set_direction(struct pinctrl_dev *pctldev,
 				     struct pinctrl_gpio_range *range,
-				     unsigned offset, bool input)
+				     unsigned int offset, bool input)
 {
 	struct sh_pfc_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
 	struct sh_pfc *pfc = pmx->pfc;
@@ -562,7 +562,7 @@ static bool sh_pfc_pinconf_validate(struct sh_pfc *pfc, unsigned int _pin,
 	}
 }
 
-static int sh_pfc_pinconf_get(struct pinctrl_dev *pctldev, unsigned _pin,
+static int sh_pfc_pinconf_get(struct pinctrl_dev *pctldev, unsigned int _pin,
 			      unsigned long *config)
 {
 	struct sh_pfc_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
@@ -637,8 +637,8 @@ static int sh_pfc_pinconf_get(struct pinctrl_dev *pctldev, unsigned _pin,
 	return 0;
 }
 
-static int sh_pfc_pinconf_set(struct pinctrl_dev *pctldev, unsigned _pin,
-			      unsigned long *configs, unsigned num_configs)
+static int sh_pfc_pinconf_set(struct pinctrl_dev *pctldev, unsigned int _pin,
+			      unsigned long *configs, unsigned int num_configs)
 {
 	struct sh_pfc_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
 	struct sh_pfc *pfc = pmx->pfc;
@@ -719,9 +719,9 @@ static int sh_pfc_pinconf_set(struct pinctrl_dev *pctldev, unsigned _pin,
 	return 0;
 }
 
-static int sh_pfc_pinconf_group_set(struct pinctrl_dev *pctldev, unsigned group,
+static int sh_pfc_pinconf_group_set(struct pinctrl_dev *pctldev, unsigned int group,
 				    unsigned long *configs,
-				    unsigned num_configs)
+				    unsigned int num_configs)
 {
 	struct sh_pfc_pinctrl *pmx = pinctrl_dev_get_drvdata(pctldev);
 	const unsigned int *pins;
