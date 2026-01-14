@@ -57,6 +57,13 @@ config ARCH_RZG2L
 	select PM_GENERIC_DOMAINS
 	select RENESAS_RZG2L_IRQC
 
+config ARCH_RZV2H
+	bool
+	select PM
+	select PM_GENERIC_DOMAINS
+	select RENESAS_RZG2L_IRQC
+	select RENESAS_RZV2H_ICU
+
 config ARCH_RZN1
 	bool
 	select PM
@@ -417,8 +424,10 @@ config ARCH_R9A09G057
 	default y if ARCH_RENESAS
 	select RENESAS_RZV2H_ICU
 	select SYS_R9A09G057
+	select ARCH_RZV2H
+	select SYS_SUPPORTS_RZ_CMTW
 	help
-	  This enables support for the Renesas RZ/V2H(P) SoC variants.
+	  This enables support for the Renesas RZ/V2H SoC variants.
 
 config ARCH_R9A09G077
 	bool "ARM64 Platform support for R9A09G077 (RZ/T2H)"
