@@ -170,6 +170,8 @@
 
 /* RSCFDnCFDCmDCFG */
 #define RCANFD_DCFG_DBRP		GENMASK(7, 0)
+#define RCANFD_DCFG_DBRP_VAL(x)		(((x) & 0xff) << 0)
+#define RCANFD_DCFG_DSJW_V2H(x)		(((x) & 0x7) << 24)
 
 /* RSCFDnCFDCmFDCFG */
 #define RCANFD_GEN4_FDCFG_CLOE		BIT(30)
@@ -343,6 +345,9 @@
 	(RCANFD_C_CFOFFSET + 0x08 + (0x30 * (ch)) + (0x10 * (idx)) + (0x04 * (df)))
 
 /* R-Car Gen4 Classical and CAN FD mode specific register map */
+#define RCANFD_V2H_CFDCFG		(0x1314)
+#define RCANFD_GEN4_FDCFG(m)		(0x1404 + (0x20 * (m)))
+
 #define RCANFD_GEN4_GAFL_OFFSET		(0x1800)
 
 /* CAN FD mode specific register map */
@@ -468,6 +473,7 @@ struct rcar_canfd_global {
 	struct platform_device *pdev;	/* Respective platform device */
 	struct clk *clkp;		/* Peripheral clock */
 	struct clk *can_clk;		/* fCAN clock */
+	struct clk *clk_ram;		/* Clock RAM */
 	unsigned long channels_mask;	/* Enabled channels mask */
 	bool extclk;			/* CANFD or Ext clock */
 	bool fdmode;			/* CAN FD or Classical CAN only mode */
@@ -617,6 +623,23 @@ static const struct rcar_canfd_hw_info rcar_gen3_hw_info = {
 	.external_clk = 1,
 };
 
+static const struct rcar_canfd_hw_info r9a09g057_hw_info = {
+	.nom_bittiming		= &rcar_canfd_gen4_nom_bittiming_const,
+	.data_bittiming		= &rcar_canfd_gen4_data_bittiming_const,
+	.tdc_const		= &rcar_canfd_gen4_tdc_const,
+	.regs			= &rcar_gen4_regs,
+	.sh			= &rcar_gen4_shift_data,
+	.rnc_field_width	= 9,
+	.max_aflpn		= 47,	/* Value is between 0h and 2Fh */
+	.max_cftml		= 31,
+	.max_channels		= 6,
+	.postdiv		= 1,
+	.multi_channel_irqs	= 1,
+	.ch_interface_mode	= 1,	/* Support multiple modes (Classic, FD) */
+	.shared_can_regs	= 1,	/* Shared classical CAN registers */
+	.external_clk		= 0,	/* Using CANFD_0_clkc */
+};
+
 static const struct rcar_canfd_hw_info rcar_gen4_hw_info = {
 	.nom_bittiming = &rcar_canfd_gen4_nom_bittiming_const,
 	.data_bittiming = &rcar_canfd_gen4_data_bittiming_const,
@@ -641,7 +664,7 @@ static const struct rcar_canfd_hw_info rzg2l_hw_info = {
 	.regs = &rcar_gen3_regs,
 	.sh = &rcar_gen3_shift_data,
 	.rnc_field_width = 8,
-	.max_aflpn = 31,
+	.max_aflpn = 7,		/* Only the first 8 pages are useable */
 	.max_cftml = 15,
 	.max_channels = 2,
 	.postdiv = 1,
@@ -853,7 +876,7 @@ static void rcar_canfd_configure_controller(struct rcar_canfd_global *gpriv)
 		/* Truncate payload to configured message size RFPLS */
 		cfg |= RCANFD_GCFG_CMPOC;
 
-	/* Set External Clock if selected */
+	/* Set External Clock if selected (RZV2H is not supported) */
 	if (gpriv->extclk)
 		cfg |= RCANFD_GCFG_DCS;
 
@@ -1985,7 +2008,6 @@ static int rcar_canfd_probe(struct platform_device *pdev)
 	u32 rule_entry = 0;
 	bool fdmode = true;			/* CAN FD only mode - default */
 	char name[9] = "channelX";
-	struct clk *clk_ram;
 	int i;
 
 	info = of_device_get_match_data(dev);
@@ -2075,9 +2097,10 @@ static int rcar_canfd_probe(struct platform_device *pdev)
 		gpriv->extclk = gpriv->info->external_clk;
 	}
 
-	clk_ram = devm_clk_get_optional_enabled(dev, "ram_clk");
-	if (IS_ERR(clk_ram))
-		return dev_err_probe(dev, PTR_ERR(clk_ram),
+	/* RAM clock */
+	gpriv->clk_ram = devm_clk_get_optional_enabled(dev, "ram_clk");
+	if (IS_ERR(gpriv->clk_ram))
+		return dev_err_probe(dev, PTR_ERR(gpriv->clk_ram),
 				     "cannot get enabled ram clock\n");
 
 	addr = devm_platform_ioremap_resource(pdev, 0);
@@ -2136,12 +2159,22 @@ static int rcar_canfd_probe(struct platform_device *pdev)
 		goto fail_dev;
 	}
 
+	/* Enable RAM clock */
+	if (gpriv->clk_ram) {
+		err = clk_prepare_enable(gpriv->clk_ram);
+		if (err) {
+			dev_err(&pdev->dev,
+				"failed to enable RAM clock, error %d\n", err);
+			goto fail_reset;
+		}
+	}
+
 	/* Enable peripheral clock for register access */
 	err = clk_prepare_enable(gpriv->clkp);
 	if (err) {
 		dev_err(dev, "failed to enable peripheral clock: %pe\n",
 			ERR_PTR(err));
-		goto fail_reset;
+		goto fail_clk;
 	}
 
 	err = rcar_canfd_reset_controller(gpriv);
@@ -2201,6 +2234,8 @@ fail_mode:
 	rcar_canfd_disable_global_interrupts(gpriv);
 fail_clk:
 	clk_disable_unprepare(gpriv->clkp);
+	if (gpriv->clk_ram)
+		clk_disable_unprepare(gpriv->clk_ram);
 fail_reset:
 	reset_control_assert(gpriv->rstc1);
 	reset_control_assert(gpriv->rstc2);
@@ -2224,6 +2259,7 @@ static void rcar_canfd_remove(struct platform_device *pdev)
 	/* Enter global sleep mode */
 	rcar_canfd_set_bit(gpriv->base, RCANFD_GCTR, RCANFD_GCTR_GSLPR);
 	clk_disable_unprepare(gpriv->clkp);
+	clk_disable_unprepare(gpriv->clk_ram);
 	reset_control_assert(gpriv->rstc1);
 	reset_control_assert(gpriv->rstc2);
 }
@@ -2247,6 +2283,7 @@ static const __maybe_unused struct of_device_id rcar_canfd_of_table[] = {
 	{ .compatible = "renesas,rcar-gen3-canfd", .data = &rcar_gen3_hw_info },
 	{ .compatible = "renesas,rcar-gen4-canfd", .data = &rcar_gen4_hw_info },
 	{ .compatible = "renesas,rzg2l-canfd", .data = &rzg2l_hw_info },
+	{ .compatible = "renesas,r9a09g057-canfd", .data = &r9a09g057_hw_info },
 	{ }
 };
 
