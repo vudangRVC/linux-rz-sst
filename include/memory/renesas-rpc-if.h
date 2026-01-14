@@ -62,13 +62,29 @@ enum rpcif_type {
 	RPCIF_RCAR_GEN4,
 	RPCIF_RZ_G2L,
 	XSPI_RZ_G3E,
+	XSPI_RZ_G3S,
+	XSPI_RZ_V2H,
 };
 
 struct rpcif {
 	struct device *dev;
+	void __iomem *base;
 	void __iomem *dirmap;
+	struct regmap *regmap;
+	struct reset_control *rstc;
+	const struct rpcif_ops *ops;
 	size_t size;
 	bool xspi;
+};
+
+struct rpcif_ops {
+	int (*sw_init)(struct rpcif *rpc, struct device *dev);
+	int (*hw_init)(struct device *dev, bool hyperflash);
+	void (*prepare)(struct device *dev, const struct rpcif_op *op, u64 *offs,
+			size_t *len);
+	int (*manual_xfer)(struct device *dev);
+	ssize_t (*dirmap_read)(struct device *dev, u64 offs, size_t len, void *buf);
+	ssize_t (*dirmap_write)(struct device *dev, u64 offs, size_t len, const void *buf);
 };
 
 int rpcif_sw_init(struct rpcif *rpc, struct device *dev);
@@ -79,5 +95,15 @@ int rpcif_manual_xfer(struct device *dev);
 ssize_t rpcif_dirmap_read(struct device *dev, u64 offs, size_t len, void *buf);
 ssize_t xspi_dirmap_write(struct device *dev, u64 offs, size_t len,
 			  const void *buf);
+
+static inline void rpcif_enable_rpm(struct rpcif *rpc)
+{
+	pm_runtime_enable(rpc->dev);
+}
+
+static inline void rpcif_disable_rpm(struct rpcif *rpc)
+{
+	pm_runtime_disable(rpc->dev);
+}
 
 #endif // __RENESAS_RPC_IF_H
