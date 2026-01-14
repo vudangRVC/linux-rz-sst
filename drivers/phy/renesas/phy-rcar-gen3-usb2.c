@@ -104,6 +104,12 @@
 /*  RZ/G2L specific */
 #define USB2_LINECTRL1_USB2_IDMON	BIT(0)
 
+#define USB2_REGEN_CG_CTRL_UPHY_WEN							BIT(0)
+#define USB2_UTMI_CTRL_LS_RXRCV_INV_EN						BIT(0)
+#define USB2_UTMI_CTRL_LS_TXDAT_INV_EN						BIT(1)
+#define USB2_UTMI_CTRL_HS_TRNS_INTER_PACKET_DELAY_WAIT_MODE	BIT(3)
+#define USB2_UTMI_CTRL_LS_EOP_LEN_ADJ_MODE_EN				BIT(7)
+
 #define NUM_OF_PHYS			4
 enum rcar_gen3_phy_index {
 	PHY_INDEX_BOTH_HC,
@@ -140,6 +146,7 @@ struct rcar_gen3_chan {
 	bool extcon_host;
 	bool is_otg_channel;
 	bool uses_otg_pins;
+	bool soc_no_adp_ctrl;
 };
 
 struct rcar_gen3_phy_drv_data {
@@ -648,6 +655,7 @@ static const struct rcar_gen3_phy_drv_data rcar_gen3_phy_usb2_data = {
 	.no_adp_ctrl = false,
 	.obint_enable_bits = USB2_OBINT_SESSVLDCHG |
 			     USB2_OBINT_IDDIGCHG,
+	.utmi_ctrl = false,
 };
 
 static const struct rcar_gen3_phy_drv_data rz_g1c_phy_usb2_data = {
@@ -655,12 +663,14 @@ static const struct rcar_gen3_phy_drv_data rz_g1c_phy_usb2_data = {
 	.no_adp_ctrl = false,
 	.obint_enable_bits = USB2_OBINT_SESSVLDCHG |
 			     USB2_OBINT_IDDIGCHG,
+	.utmi_ctrl = false,
 };
 
 static const struct rcar_gen3_phy_drv_data rz_g2l_phy_usb2_data = {
 	.phy_usb2_ops = &rcar_gen3_phy_usb2_ops,
 	.no_adp_ctrl = true,
 	.obint_enable_bits = USB2_OBINT_IDCHG_EN,
+	.utmi_ctrl = false,
 };
 
 static const struct rcar_gen3_phy_drv_data rz_g3s_phy_usb2_data = {
@@ -719,6 +729,10 @@ static const struct of_device_id rcar_gen3_phy_usb2_match_table[] = {
 	{
 		.compatible = "renesas,rcar-gen3-usb2-phy",
 		.data = &rcar_gen3_phy_usb2_data,
+	},
+	{
+		.compatible = "renesas,rzv2h-usb2-phy",
+		.data = &rz_v2h_phy_usb2_data,
 	},
 	{ /* sentinel */ },
 };
