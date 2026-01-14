@@ -790,6 +790,7 @@ static ssize_t num_users_show(struct device *dev, struct device_attribute *attr,
 			      char *buf)
 {
 	struct regulator_dev *rdev = dev_get_drvdata(dev);
+
 	return sprintf(buf, "%d\n", rdev->use_count);
 }
 static DEVICE_ATTR_RO(num_users);
@@ -3249,7 +3250,7 @@ static int _regulator_is_enabled(struct regulator_dev *rdev)
 }
 
 static int _regulator_list_voltage(struct regulator_dev *rdev,
-				   unsigned selector, int lock)
+				   unsigned int selector, int lock)
 {
 	const struct regulator_ops *ops = rdev->desc->ops;
 	int ret;
@@ -3344,7 +3345,7 @@ EXPORT_SYMBOL_GPL(regulator_count_voltages);
  *	   0 if @selector can't be used on this system, or a negative error
  *	   number on failure.
  */
-int regulator_list_voltage(struct regulator *regulator, unsigned selector)
+int regulator_list_voltage(struct regulator *regulator, unsigned int selector)
 {
 	return _regulator_list_voltage(regulator->rdev, selector, 1);
 }
@@ -3383,8 +3384,8 @@ EXPORT_SYMBOL_GPL(regulator_get_regmap);
  * and 0 is returned, otherwise a negative error number is returned.
  */
 int regulator_get_hardware_vsel_register(struct regulator *regulator,
-					 unsigned *vsel_reg,
-					 unsigned *vsel_mask)
+					 unsigned int *vsel_reg,
+					 unsigned int *vsel_mask)
 {
 	struct regulator_dev *rdev = regulator->rdev;
 	const struct regulator_ops *ops = rdev->desc->ops;
@@ -3413,7 +3414,7 @@ EXPORT_SYMBOL_GPL(regulator_get_hardware_vsel_register);
  *	   selectors.
  */
 int regulator_list_hardware_vsel(struct regulator *regulator,
-				 unsigned selector)
+				 unsigned int selector)
 {
 	struct regulator_dev *rdev = regulator->rdev;
 	const struct regulator_ops *ops = rdev->desc->ops;
@@ -3543,7 +3544,7 @@ static int regulator_map_voltage(struct regulator_dev *rdev, int min_uV,
 
 static int _regulator_call_set_voltage(struct regulator_dev *rdev,
 				       int min_uV, int max_uV,
-				       unsigned *selector)
+				       unsigned int *selector)
 {
 	struct pre_voltage_change_data data;
 	int ret;
@@ -3567,7 +3568,7 @@ static int _regulator_call_set_voltage(struct regulator_dev *rdev,
 }
 
 static int _regulator_call_set_voltage_sel(struct regulator_dev *rdev,
-					   int uV, unsigned selector)
+					   int uV, unsigned int selector)
 {
 	struct pre_voltage_change_data data;
 	int ret;
