@@ -78,6 +78,9 @@
 #define ICIER_NAKIE	BIT(4)
 #define ICIER_SPIE	BIT(3)
 
+#define ICFER_SCLE	BIT(6)
+#define ICFER_NFE	BIT(5)
+
 #define ICSR2_NACKF	BIT(4)
 #define ICSR2_STOP	BIT(3)
 
@@ -171,7 +174,7 @@ static int riic_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 	struct device *dev = adap->dev.parent;
 	unsigned long time_left;
 	int i, ret;
-	u8 start_bit;
+	u8 start_bit, val;
 
 	ret = pm_runtime_resume_and_get(dev);
 	if (ret)
@@ -205,7 +208,17 @@ static int riic_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 		start_bit = ICCR2_RS;
 	}
 
- out:
+	/* Should check bus state after finishing transfer */
+	if (!riic->err) {
+		time_left = readb_relaxed_poll_timeout(riic->base + riic->info->regs[RIIC_ICCR2],
+								val, !(val & ICCR2_BBSY), 10, 100);
+		if (time_left)
+			dev_warn(riic->adapter.dev.parent,
+					"The i2c bus is still busy\n");
+	}
+
+out:
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 
 	return riic->err ?: num;
@@ -381,16 +394,18 @@ static int riic_init_hw(struct riic_dev *riic)
 	/*
 	 * Determine reference clock rate. We must be able to get the desired
 	 * frequency with only 62 clock ticks max (31 high, 31 low).
-	 * Aim for a duty of 60% LOW, 40% HIGH.
+	 * Aim for a duty of:
+	 * - Below 50kHz: 50% LOW, 50% HIGH.
+	 * - Above 50kHz: 60% LOW, 40% HIGH
 	 */
 	total_ticks = DIV_ROUND_UP(rate, t->bus_freq_hz ?: 1);
 
 	for (cks = 0; cks <= 7; cks++) {
 		/*
-		 * 60% low time must be less than BRL + 2 + 1
+		 * Period of low time (60% or 50%) must be less than BRL + 2 + 1
 		 * BRL max register value is 0x1F.
 		 */
-		brl = ((total_ticks * 6) / 10);
+		brl = ((total_ticks * ((t->bus_freq_hz >= 50000) ? 6 : 5)) / 10);
 		if (brl <= (0x1F + 3))
 			break;
 
@@ -401,10 +416,6 @@ static int riic_init_hw(struct riic_dev *riic)
 	if (brl > (0x1F + 3))
 		return dev_err_probe(dev, -EINVAL, "invalid speed (%uHz). Too slow.\n",
 				     t->bus_freq_hz);
-
-	brh = total_ticks - brl;
-
-	/* Remove automatic clock ticks for sync circuit and NF */
 	if (cks == 0) {
 		brl -= 4;
 		brh -= 4;
@@ -435,6 +446,10 @@ static int riic_init_hw(struct riic_dev *riic)
 	if (ret)
 		return ret;
 
+	/* Set SCLE and NFE after resume to ensure hardware is ready */
+	riic_clear_set_bit(riic, 0, ICFER_SCLE | ICFER_NFE,
+			   riic->info->regs[RIIC_ICFER]);
+
 	/* Changing the order of accessing IICRST and ICE may break things! */
 	riic_writeb(riic, ICCR1_IICRST | ICCR1_SOWP, RIIC_ICCR1);
 	riic_clear_set_bit(riic, 0, ICCR1_ICE, RIIC_ICCR1);
@@ -451,6 +466,7 @@ static int riic_init_hw(struct riic_dev *riic)
 
 	riic_clear_set_bit(riic, ICCR1_IICRST, 0, RIIC_ICCR1);
 
+	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_autosuspend(dev);
 	return 0;
 }
@@ -748,6 +764,7 @@ static const struct dev_pm_ops riic_i2c_pm_ops = {
 	NOIRQ_SYSTEM_SLEEP_PM_OPS(riic_i2c_suspend_noirq, riic_i2c_resume_noirq)
 	SYSTEM_SLEEP_PM_OPS(riic_i2c_suspend, riic_i2c_resume)
 };
+
 
 static const struct of_device_id riic_i2c_dt_ids[] = {
 	{ .compatible = "renesas,riic-r7s72100", .data =  &riic_rz_a1h_info, },

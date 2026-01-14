@@ -42,6 +42,8 @@
 #define WDTRCR_RSTIRQS		BIT(7)
 
 #define WDTDCR_WDTSTOPCTRL	BIT(0)
+#define MAX_TIMEOUT_CYCLES	16384
+#define CLOCK_DIV_BY_256	256
 
 #define WDT_DEFAULT_TIMEOUT	60U
 
@@ -339,9 +341,11 @@ static int rzv2h_wdt_probe(struct platform_device *pdev)
 	watchdog_set_nowayout(&priv->wdev, nowayout);
 	watchdog_stop_on_unregister(&priv->wdev);
 
-	watchdog_init_timeout(&priv->wdev, 0, dev);
+	ret = watchdog_init_timeout(&priv->wdev, 0, dev);
+	if (ret)
+		dev_warn(dev, "Specified timeout invalid, using default");
 
-	return devm_watchdog_register_device(dev, &priv->wdev);
+	return devm_watchdog_register_device(&pdev->dev, &priv->wdev);
 }
 
 static const struct rzv2h_of_data rzt2h_wdt_of_data = {
