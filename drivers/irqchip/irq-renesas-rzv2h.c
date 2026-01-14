@@ -16,10 +16,14 @@
 #include <linux/irqchip.h>
 #include <linux/irqchip/irq-renesas-rzv2h.h>
 #include <linux/irqdomain.h>
+#include <linux/clk.h>
+#include <linux/of_address.h>
 #include <linux/of_platform.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
 #include <linux/spinlock.h>
+#include <linux/syscore_ops.h>
+#include <linux/irqchip/icu-v2h.h>
 
 /* DT "interrupts" indexes */
 #define ICU_IRQ_START				1
@@ -39,12 +43,17 @@
 #define ICU_TSCLR				0x24
 #define ICU_TITSR(k)				(0x28 + (k) * 4)
 #define ICU_TSSR(k)				(0x30 + (k) * 4)
-#define ICU_DMkSELy(k, y)			(0x420 + (k) * 0x20 + (y) * 4)
-#define ICU_DMACKSELk(k)			(0x500 + (k) * 4)
+#define ICU_DMkSELy(k, y)			(0x420 + (k) * 0x20 + (y) * 4)	/* DMACx Factor Selection Register y */
+#define ICU_DMACKSELk(k)			(0x500 + (k) * 4)				/* DMAC ACK Selection Register x */
+#define ICU_DMTENDSELk(x)   				(0x055C + (x) * 0x0004) 		/* DMAC TEND Selection Register x */
+#define ICU_IPTSR				0x60
 
 /* NMI */
 #define ICU_NMI_EDGE_FALLING			0
 #define ICU_NMI_EDGE_RISING			1
+
+#define ICU_NSCNT_NSTAT				BIT(0)
+#define ICU_NSCNT_NSTAT_DETECTED		1
 
 #define ICU_NSCLR_NCLR				BIT(0)
 
@@ -123,6 +132,7 @@ struct rzv2h_hw_info {
  */
 struct rzv2h_icu_priv {
 	void __iomem			*base;
+	const struct irq_chip		*irqchip;
 	struct irq_fwspec		fwspec[ICU_NUM_IRQ];
 	raw_spinlock_t			lock;
 	const struct rzv2h_hw_info	*info;
@@ -153,6 +163,24 @@ static inline struct rzv2h_icu_priv *irq_data_to_priv(struct irq_data *data)
 {
 	return data->domain->host_data;
 }
+
+static struct rzv2h_irqc_reg_cache {
+	void __iomem	*base;
+	u32		nitsr;
+	u32		iitsr;
+	u32		iptsr;
+	u32		titsr[2];
+	u32		tssr[16];
+} *rzv2h_irqc_reg_cache_data;
+
+static void rzv2h_clear_nmi_int(struct rzv2h_icu_priv *priv)
+{
+	u32 nscnt = readl_relaxed(priv->base + ICU_NSCNT);
+
+	if ((nscnt & ICU_NSCNT_NSTAT) == ICU_NSCNT_NSTAT_DETECTED)
+		writel_relaxed(ICU_NSCLR_NCLR, priv->base + ICU_NSCLR);
+}
+
 
 static void rzv2h_icu_eoi(struct irq_data *d)
 {
@@ -421,6 +449,48 @@ static int rzv2h_icu_set_type(struct irq_data *d, unsigned int type)
 	return irq_chip_set_type_parent(d, IRQ_TYPE_LEVEL_HIGH);
 }
 
+static int rzv2h_irqc_irq_suspend(void)
+{
+	void __iomem *base = rzv2h_irqc_reg_cache_data->base;
+
+	rzv2h_irqc_reg_cache_data->nitsr = readl_relaxed(base + ICU_NITSR);
+	rzv2h_irqc_reg_cache_data->iitsr = readl_relaxed(base + ICU_IITSR);
+	rzv2h_irqc_reg_cache_data->iptsr = readl_relaxed(base + ICU_IPTSR);
+
+	for (u8 i = 0; i < 2; i++)
+		rzv2h_irqc_reg_cache_data->titsr[i] = readl_relaxed(base + ICU_TITSR(i));
+
+	for (u8 i = 0; i < 16; i++)
+		rzv2h_irqc_reg_cache_data->tssr[i] = readl_relaxed(base + ICU_TSSR(i));
+
+	return 0;
+}
+
+static void rzv2h_irqc_irq_resume(void)
+{
+	void __iomem *base = rzv2h_irqc_reg_cache_data->base;
+
+	/*
+	 * Restore only interrupt type. TSSRx will be restored at the
+	 * request of pin controller to avoid spurious interrupts due
+	 * to invalid PIN states.
+	 */
+	for (u8 i = 0; i < 2; i++)
+		writel_relaxed(rzv2h_irqc_reg_cache_data->titsr[i], base + ICU_TITSR(i));
+
+	for (u8 i = 0; i < 16; i++)
+		writel_relaxed(rzv2h_irqc_reg_cache_data->tssr[i], base + ICU_TSSR(i));
+
+	writel_relaxed(rzv2h_irqc_reg_cache_data->nitsr, base + ICU_NITSR);
+	writel_relaxed(rzv2h_irqc_reg_cache_data->iitsr, base + ICU_IITSR);
+	writel_relaxed(rzv2h_irqc_reg_cache_data->iptsr, base + ICU_IPTSR);
+}
+
+static struct syscore_ops rzv2h_irqc_syscore_ops = {
+	.suspend	= rzv2h_irqc_irq_suspend,
+	.resume		= rzv2h_irqc_irq_resume,
+};
+
 static const struct irq_chip rzv2h_icu_chip = {
 	.name			= "rzv2h-icu",
 	.irq_eoi		= rzv2h_icu_eoi,
@@ -437,6 +507,65 @@ static const struct irq_chip rzv2h_icu_chip = {
 				  IRQCHIP_SET_TYPE_MASKED |
 				  IRQCHIP_SKIP_SET_WAKE,
 };
+
+int register_dmac_req_signal(struct platform_device *icu_dev, unsigned int dmac,
+						unsigned int channel, int dmac_req)
+{
+	struct rzv2h_icu_priv *priv = platform_get_drvdata(icu_dev);
+	u32 y, low_up, dmsel;
+	u32 mask = 0x0000FFFF;
+
+	if ((dmac_req < 0) || (dmac_req > 0x1B4))
+		dev_dbg(&icu_dev->dev, "%s: Disable dmac req signal\n", __func__);
+
+	if ((channel < 0) || (channel > 15)) {
+		dev_dbg(&icu_dev->dev, "%s: Invalid channel\n", __func__);
+		return -EINVAL;
+	}
+
+	y = channel / 2;
+	low_up = channel % 2;
+
+	dmsel = readl(priv->base + ICU_DMkSELy(dmac, y));
+
+	if (low_up) {
+		dmac_req <<= 16;
+		mask <<= 16;
+	}
+
+	dmsel = (dmsel & (~mask)) | dmac_req;
+
+	writel(dmsel, priv->base + ICU_DMkSELy(dmac, y));
+
+	return 0;
+}
+EXPORT_SYMBOL(register_dmac_req_signal);
+
+int register_dmac_ack_signal(struct platform_device *icu_dev, unsigned int dmac,
+					     int dmac_ack, int dmac_ack_channel)
+{
+	struct rzv2h_icu_priv *priv = platform_get_drvdata(icu_dev);
+	u32 reg_position, dmacksel, mask;
+
+	if ((dmac_ack_channel < 0) || (dmac_ack_channel > 0x4F))
+		dev_dbg(&icu_dev->dev, "%s: Disable dmac ack signal\n", __func__);
+
+	if ((dmac_ack < 0) || (dmac_ack > 88))
+		dev_dbg(&icu_dev->dev, "%s: Not use dmac ack\n", __func__);
+
+	reg_position = dmac_ack / 4;
+	dmacksel = readl(priv->base + ICU_DMACKSELk(reg_position));
+
+	mask = 0x7F << (8 * (dmac_ack % 4));
+	dmac_ack_channel = dmac_ack_channel + (16 * dmac);
+	dmac_ack_channel <<= (8 * (dmac_ack % 4));
+	dmacksel = (dmacksel  & (~mask)) | dmac_ack_channel;
+
+	writel(dmacksel, priv->base + ICU_DMACKSELk(reg_position));
+
+	return 0;
+}
+EXPORT_SYMBOL(register_dmac_ack_signal);
 
 static int rzv2h_icu_alloc(struct irq_domain *domain, unsigned int virq, unsigned int nr_irqs,
 			   void *arg)
@@ -468,7 +597,7 @@ static int rzv2h_icu_alloc(struct irq_domain *domain, unsigned int virq, unsigne
 	if (hwirq > (ICU_NUM_IRQ - 1))
 		return -EINVAL;
 
-	ret = irq_domain_set_hwirq_and_chip(domain, virq, hwirq, &rzv2h_icu_chip,
+	ret = irq_domain_set_hwirq_and_chip(domain, virq, hwirq, priv->irqchip,
 					    (void *)(uintptr_t)tint);
 	if (ret)
 		return ret;
@@ -518,11 +647,16 @@ static int rzv2h_icu_probe_common(struct platform_device *pdev, struct device_no
 	if (!rzv2h_icu_data)
 		return -ENOMEM;
 
+	rzv2h_icu_data->irqchip = &rzv2h_icu_chip;
 	platform_set_drvdata(pdev, rzv2h_icu_data);
 
 	rzv2h_icu_data->base = devm_of_iomap(&pdev->dev, pdev->dev.of_node, 0, NULL);
 	if (IS_ERR(rzv2h_icu_data->base))
 		return PTR_ERR(rzv2h_icu_data->base);
+
+	rzv2h_irqc_reg_cache_data = devm_kzalloc(&pdev->dev,
+					sizeof(*rzv2h_irqc_reg_cache_data), GFP_KERNEL);
+	rzv2h_irqc_reg_cache_data->base = rzv2h_icu_data->base;
 
 	ret = rzv2h_icu_parse_interrupts(rzv2h_icu_data, node);
 	if (ret) {
@@ -560,7 +694,14 @@ static int rzv2h_icu_probe_common(struct platform_device *pdev, struct device_no
 		goto pm_put;
 	}
 
+	if (!hw_info) {
+		dev_err(&pdev->dev, "missing hardware info\n");
+		ret = -ENOENT;
+		goto pm_put;
+	}
 	rzv2h_icu_data->info = hw_info;
+	
+	register_syscore_ops(&rzv2h_irqc_syscore_ops);
 
 	/*
 	 * coccicheck complains about a missing put_device call before returning, but it's a false
