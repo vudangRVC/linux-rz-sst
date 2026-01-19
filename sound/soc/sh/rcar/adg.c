@@ -391,16 +391,33 @@ void rsnd_adg_clk_control(struct rsnd_priv *priv, int enable)
 
 	for_each_rsnd_clkin(clk, adg, i) {
 		if (enable) {
-			clk_prepare_enable(clk);
-
 			/*
-			 * We shouldn't use clk_get_rate() under
-			 * atomic context. Let's keep it when
-			 * rsnd_adg_clk_enable() was called
-			 */
+			* We shouldn't use clk_get_rate() under
+			* atomic context. Let's keep it when
+			* rsnd_adg_clk_enable() was called
+			*/
 			adg->clkin_rate[i] = clk_get_rate(clk);
+			
+			/* Only try to enable clocks with non-zero rates */
+			if (adg->clkin_rate[i] > 0) {
+				int ret = clk_prepare_enable(clk);
+				if (ret) {
+					dev_warn(rsnd_priv_to_dev(priv), 
+							"Failed to enable clock %d (%u Hz): %d\n", 
+							i, adg->clkin_rate[i], ret);
+				} else {
+					dev_dbg(rsnd_priv_to_dev(priv), 
+							"Enabled clock %d: %u Hz\n", i, adg->clkin_rate[i]);
+				}
+			} else {
+				dev_dbg(rsnd_priv_to_dev(priv), 
+						"Skipping clock %d (rate=0)\n", i);
+			}
 		} else {
-			clk_disable_unprepare(clk);
+			/* Only disable clocks that were actually enabled */
+			if (adg->clkin_rate[i] > 0) {
+				clk_disable_unprepare(clk);
+			}
 		}
 	}
 }
