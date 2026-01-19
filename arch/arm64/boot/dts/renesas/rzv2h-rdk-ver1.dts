@@ -235,11 +235,8 @@
 
     sound_card: sound {
         compatible = "audio-graph-card";
-
-        label = "rcar-sound";
-
-        dais = <&rsnd_port0	/* HDMI0  */
-            >;
+        label = "rcar_sound";
+        dais = <&rsnd_port0>;
     };
 };
 
@@ -486,7 +483,7 @@
         dlg,micbias-lvl = <2600>;
         dlg,mic-amp-in-sel = "diff";
 
-        status = "okay";
+        status = "disabled";
 
         interrupt-parent = <&pinctrl>;
         interrupts = <RZV2H_GPIO(5, 1) IRQ_TYPE_LEVEL_LOW>;
@@ -642,6 +639,7 @@
         v1p2-supply = <&reg_1p8v>;
 
         adi,dsi-lanes = <4>;
+        #sound-dai-cells = <0>;
 
         ports {
             #address-cells = <1>;
@@ -782,15 +780,15 @@
 &rcar_sound {
     pinctrl-0 = <&sound_pins_hdmi>;
     pinctrl-names = "default";
-
     status = "okay";
 
     /* audio_clkout */
     #clock-cells = <0>;
-    clock-frequency = <11289600>;
+    /* use internal clock, see rsnd_adg_get_clkout() */
+    clock-frequency = <22579200 24576000>;
 
     /* Multi DAI */
-    #sound-dai-cells = <1>;
+    #sound-dai-cells = <0>;
 
     ports {
         #address-cells = <1>;
