@@ -18,8 +18,9 @@ static int gpio_dummy_get(struct gpio_chip *chip, unsigned int offset)
 	return 0;
 }
 
-static void gpio_dummy_set(struct gpio_chip *chip, unsigned int offset, int value)
+static int gpio_dummy_set(struct gpio_chip *chip, unsigned int offset, int value)
 {
+	return 0;
 }
 
 static int gpio_dummy_direction_input(struct gpio_chip *chip, unsigned int offset)
@@ -68,10 +69,9 @@ static int gpio_dummy_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int gpio_dummy_remove(struct platform_device *pdev)
+static void gpio_dummy_remove(struct platform_device *pdev)
 {
 	gpiochip_remove(&gpio_dummy_chip);
-	return 0;
 }
 
 static const struct of_device_id gpio_dummy_of_match[] = {
