@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+/*
+ * Device Tree Overlay for DA7219 Audio Codec on RZ/V2H RDK ver1
+ */
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/pinctrl/rzv2h-pinctrl.h>
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/interrupt-controller/irq.h>
+
+&pinctrl {
+    sound_pins: sound {
+        pinmux = <RZV2H_PORT_PINMUX(9, 5, 7)>,  /* SSI0_SCK */
+                 <RZV2H_PORT_PINMUX(9, 6, 7)>,  /* SSI0_WS */
+                 <RZV2H_PORT_PINMUX(9, 7, 7)>,  /* SSI0_SDATA */
+                 <RZV2H_PORT_PINMUX(8, 5, 7)>;  /* SSI4_SDATA */
+    };
+};
+
+&rsci_i2c7 {
+    status = "okay";
+
+    da7219: da7219@1a {
+        compatible = "dlg,da7219";
+        #sound-dai-cells = <0>;
+        #address-cells = <1>;
+        #size-cells = <0>;
+        reg = <0x1a>;
+
+        dlg,micbias-lvl = <2600>;
+        dlg,mic-amp-in-sel = "diff";
+        VDD-supply = <&reg_1p8v>;
+        VDDMIC-supply = <&reg_3p3v>;
+        VDDIO-supply = <&reg_3p3v>;
+        clock-names = "mclk";
+        status = "okay";
+
+        interrupt-parent = <&pinctrl>;
+        interrupts = <RZV2H_GPIO(5, 1) IRQ_TYPE_LEVEL_LOW>;
+
+        da7219_aad {
+            dlg,btn-avg = <4>;
+            dlg,adc-1bit-rpt = <1>;
+            dlg,btn-cfg = <50>;
+            dlg,mic-det-thr = <500>;
+            dlg,jack-ins-deb = <20>;
+            dlg,jack-det-rate = "32_64";
+            dlg,jack-rem-deb = <1>;
+            dlg,a-d-btn-thr = <0xa>;
+            dlg,d-b-btn-thr = <0x16>;
+            dlg,b-c-btn-thr = <0x21>;
+            dlg,c-mic-btn-thr = <0x3E>;
+        };
+        
+        port {
+            da7219_endpoint: endpoint {
+                remote-endpoint = <&rsnd_endpoint1>;
+            };
+        };
+    };
+};
+
+&rcar_sound {
+    // Add DA7219 pins to existing HDMI pins
+    pinctrl-0 = <&sound_pins>;
+    
+    ports {
+        /* Add DA7219 port */
+        rsnd_port0: port@0 {
+            reg = <0>;
+            rsnd_endpoint0: endpoint {
+                remote-endpoint = <&da7219_endpoint>;
+                dai-format = "i2s";
+                bitclock-master = <&rsnd_endpoint0>;
+                frame-master = <&rsnd_endpoint0>;
+                mclk-fs = <256>;
+                playbook = <&ssi3>;
+                capture = <&ssi4>;
+            };
+        };
+    };
+};
+
+&ssi4 {
+    shared-pin;
+};

@@ -237,9 +237,7 @@
         compatible = "audio-graph-card";
 
         label = "rcar-sound";
-        dais = <&rsnd_port0 /* HDMI0 */
-                &rsnd_port1 /* DA7219 */
-        >;
+        dais = <&rsnd_port0>;
     };
 };
 
@@ -335,13 +333,6 @@
         pinmux = <RZV2H_PORT_PINMUX(4, 0, 7)>, /* SSI0_SCK */
              <RZV2H_PORT_PINMUX(4, 1, 7)>,     /* SSI0_WS */
              <RZV2H_PORT_PINMUX(4, 2, 7)>;     /* SSI0_SDATA */
-    };
-
-    sound_pins: sound {
-        pinmux = <RZV2H_PORT_PINMUX(7, 4, 7)>,  /* SSI3_SCK */
-            <RZV2H_PORT_PINMUX(7, 5, 7)>,       /* SSI3_WS */
-            <RZV2H_PORT_PINMUX(8, 4, 7)>,       /* SSI3_SDATA */
-            <RZV2H_PORT_PINMUX(8, 5, 7)>;       /* SSI4_SDATA */
     };
 };
 
@@ -471,52 +462,10 @@
 &rsci_i2c7 {
     pinctrl-0 = <&rsci_i2c7_pins>;
     pinctrl-names = "default";
-	#address-cells = <1>;
-	#size-cells = <0>;
+    #address-cells = <1>;
+    #size-cells = <0>;
 
-    status = "okay";
-
-    da7219: da7219@1a {
-        compatible = "dlg,da7219";
-
-        #sound-dai-cells = <0>;
-        #address-cells = <1>;
-        #size-cells = <0>;
-        reg = <0x1a>;
-
-        dlg,micbias-lvl = <2600>;
-        dlg,mic-amp-in-sel = "diff";
-        VDD-supply = <&reg_1p8v>;
-        VDDMIC-supply = <&reg_3p3v>;
-        VDDIO-supply = <&reg_3p3v>;
-        clock-names = "mclk";
-
-        status = "okay";
-
-        interrupt-parent = <&pinctrl>;
-        interrupts = <RZV2H_GPIO(5, 1) IRQ_TYPE_LEVEL_LOW>;
-
-        da7219_aad {
-            dlg,btn-avg = <4>;
-            dlg,adc-1bit-rpt = <1>;
-            dlg,btn-cfg = <50>;
-            dlg,mic-det-thr = <500>;
-            dlg,jack-ins-deb = <20>;
-            dlg,jack-det-rate = "32_64";
-            dlg,jack-rem-deb = <1>;
-
-            dlg,a-d-btn-thr = <0xa>;
-            dlg,d-b-btn-thr = <0x16>;
-            dlg,b-c-btn-thr = <0x21>;
-            dlg,c-mic-btn-thr = <0x3E>;
-        };
-
-        port {
-            da7219_endpoint: endpoint {
-                remote-endpoint = <&rsnd_endpoint1>;
-            };
-        };
-    };
+    status = "disabled";
 };
 
 &spi0 {
@@ -792,7 +741,7 @@
 #endif
 
 &rcar_sound {
-    pinctrl-0 = <&sound_pins_hdmi &sound_pins>;
+    pinctrl-0 = <&sound_pins_hdmi>;
     pinctrl-names = "default";
 
     status = "okay";
@@ -821,25 +770,5 @@
                 playback = <&ssi0>;
             };
         };
-
-        /* External audio codec da7219 */
-        rsnd_port1: port@1 {
-            reg = <1>;
-            rsnd_endpoint1: endpoint {
-                remote-endpoint = <&da7219_endpoint>;
-
-                dai-format = "i2s";
-                bitclock-master = <&rsnd_endpoint1>;
-                frame-master = <&rsnd_endpoint1>;
-                mclk-fs = <256>;
-
-                playback = <&ssi3>;
-                capture = <&ssi4>;
-            };
-        };
     };
-};
-
-&ssi4 {
-    shared-pin;
 };
