@@ -10,12 +10,24 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/interrupt-controller/irq.h>
 
+&sound_card {
+    dais = <&rsnd_port0>;
+};
+
 &pinctrl {
     sound_pins_codec: sound {
         pinmux = <RZV2H_PORT_PINMUX(9, 5, 7)>,  /* SSI0_SCK */
                  <RZV2H_PORT_PINMUX(9, 6, 7)>,  /* SSI0_WS */
                  <RZV2H_PORT_PINMUX(9, 7, 7)>,  /* SSI0_SDATA */
                  <RZV2H_PORT_PINMUX(8, 5, 7)>;  /* SSI4_SDATA */
+    };
+};
+
+&i2c3 {
+    adv7535: hdmi@3d {
+        ports {
+            port@2 { status = "disabled"; };
+        };
     };
 };
 
@@ -77,7 +89,7 @@
                 frame-master = <&rsnd_endpoint0>;
                 mclk-fs = <256>;
 
-                playback = <&ssi3>;
+                playback = <&ssi0>;
                 capture = <&ssi4>;
             };
         };
