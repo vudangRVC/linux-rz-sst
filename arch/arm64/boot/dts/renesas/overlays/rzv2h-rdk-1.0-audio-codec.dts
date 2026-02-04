@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 /*
  * Device Tree Overlay for DA7219 Audio Codec on RZ/V2H RDK ver1
+ * Copyright (C) 2025 Renesas Electronics Corporation
  */
 /dts-v1/;
 /plugin/;
@@ -10,7 +11,7 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 
 &pinctrl {
-    sound_pins: sound {
+    sound_pins_codec: sound {
         pinmux = <RZV2H_PORT_PINMUX(9, 5, 7)>,  /* SSI0_SCK */
                  <RZV2H_PORT_PINMUX(9, 6, 7)>,  /* SSI0_WS */
                  <RZV2H_PORT_PINMUX(9, 7, 7)>,  /* SSI0_SDATA */
@@ -52,30 +53,31 @@
             dlg,b-c-btn-thr = <0x21>;
             dlg,c-mic-btn-thr = <0x3E>;
         };
-        
+
         port {
             da7219_endpoint: endpoint {
-                remote-endpoint = <&rsnd_endpoint1>;
+                remote-endpoint = <&rsnd_endpoint0>;
             };
         };
     };
 };
 
 &rcar_sound {
-    // Add DA7219 pins to existing HDMI pins
-    pinctrl-0 = <&sound_pins>;
-    
+    pinctrl-0 = <&sound_pins_codec>;
+
     ports {
         /* Add DA7219 port */
         rsnd_port0: port@0 {
             reg = <0>;
             rsnd_endpoint0: endpoint {
                 remote-endpoint = <&da7219_endpoint>;
+
                 dai-format = "i2s";
                 bitclock-master = <&rsnd_endpoint0>;
                 frame-master = <&rsnd_endpoint0>;
                 mclk-fs = <256>;
-                playbook = <&ssi3>;
+
+                playback = <&ssi3>;
                 capture = <&ssi4>;
             };
         };
