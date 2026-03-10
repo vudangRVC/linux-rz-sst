@@ -112,7 +112,7 @@ static const char * const sel_gpu2[] = { ".pll6", ".pll3_div2_2" };
 static const u32 mtable_sdhi[] = { 1, 2, 3 };
 
 static const struct {
-	struct cpg_core_clk common[56];
+	struct cpg_core_clk common[57];
 #ifdef CONFIG_CLK_R9A07G054
 	struct cpg_core_clk drp[0];
 #endif
@@ -165,6 +165,7 @@ static const struct {
 
 		/* Core output clk */
 		DEF_DIV("I", R9A07G044_CLK_I, CLK_PLL1, DIVPL1A, dtable_1_8),
+		DEF_DIV("I2", R9A07G054_CLK_I2, CLK_PLL3_DIV2_4, DIVPL3CLK200FIX, dtable_1_32),
 		DEF_DIV("P0", R9A07G044_CLK_P0, CLK_PLL2_DIV2_8, DIVPL2A, dtable_1_32),
 		DEF_FIXED("P0_DIV2", R9A07G044_CLK_P0_DIV2, R9A07G044_CLK_P0, 1, 2),
 		DEF_FIXED("TSU", R9A07G044_CLK_TSU, CLK_PLL2_DIV2_10, 1, 1),
@@ -305,6 +306,10 @@ static const struct {
 					0x56c, 0),
 		DEF_MOD("lcdc_clk_d",	R9A07G044_LCDC_CLK_D, R9A07G044_CLK_M3,
 					0x56c, 1),
+		DEF_MOD("cm33_clkin",   R9A07G054_CM33_CLKIN, R9A07G054_CLK_I2,
+					0x504, 0),
+		DEF_MOD("cm33_tsclk",   R9A07G054_CM33_TSCLK, R9A07G054_OSCCLK,
+					0x504, 1),
 		DEF_MOD("ssi0_pclk",	R9A07G044_SSI0_PCLK2, R9A07G044_CLK_P0,
 					0x570, 0),
 		DEF_MOD("ssi0_sfr",	R9A07G044_SSI0_PCLK_SFR, R9A07G044_CLK_P0,
@@ -450,12 +455,20 @@ static const struct rzg2l_reset r9a07g044_resets[] = {
 	DEF_RST(R9A07G044_ADC_PRESETN, 0x8a8, 0),
 	DEF_RST(R9A07G044_ADC_ADRST_N, 0x8a8, 1),
 	DEF_RST(R9A07G044_TSU_PRESETN, 0x8ac, 0),
+#ifdef CONFIG_CLK_R9A07G054
+ 	DEF_RST(R9A07G054_STPAI_ARESETN, 0x8e8, 0),
+	DEF_RST(R9A07G054_CM33_NPORESET, 0x804, 0),
+	DEF_RST(R9A07G054_CM33_NSYSRESET, 0x804, 1),
+	DEF_RST(R9A07G054_CM33_MISCRESETN, 0x804, 2),
+ #endif
 };
 
 static const unsigned int r9a07g044_crit_mod_clks[] __initconst = {
 	MOD_CLK_BASE + R9A07G044_GIC600_GICCLK,
 	MOD_CLK_BASE + R9A07G044_IA55_CLK,
 	MOD_CLK_BASE + R9A07G044_DMAC_ACLK,
+	MOD_CLK_BASE + R9A07G044_SCIF2_CLK_PCK,
+	MOD_CLK_BASE + R9A07G044_OSTM2_PCLK,
 };
 
 static const unsigned int r9a07g044_no_pm_mod_clks[] = {
@@ -507,7 +520,7 @@ const struct rzg2l_cpg_info r9a07g054_cpg_info = {
 	/* Module Clocks */
 	.mod_clks = mod_clks.common,
 	.num_mod_clks = ARRAY_SIZE(mod_clks.common) + ARRAY_SIZE(mod_clks.drp),
-	.num_hw_mod_clks = R9A07G054_STPAI_ACLK_DRP + 1,
+	.num_hw_mod_clks = R9A07G054_CM33_TSCLK + 1,
 
 	/* No PM Module Clocks */
 	.no_pm_mod_clks = r9a07g044_no_pm_mod_clks,
@@ -515,7 +528,7 @@ const struct rzg2l_cpg_info r9a07g054_cpg_info = {
 
 	/* Resets */
 	.resets = r9a07g044_resets,
-	.num_resets = R9A07G054_STPAI_ARESETN + 1, /* Last reset ID + 1 */
+	.num_resets = R9A07G054_CM33_MISCRESETN + 1, /* Last reset ID + 1 */
 
 	.has_clk_mon_regs = true,
 };
