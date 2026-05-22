@@ -38,7 +38,7 @@
 #define AMnMBS_MBSTS			0x7
 
 #define AMnAXIATTR_AXILEN_MASK		GENMASK(3, 0)
-#define AMnAXIATTR_AXILEN		(0xf)
+#define AMnAXIATTR_AXILEN		(0x6)
 
 /* AXI Master FIFO Pointer Register for CRU Image Data */
 #define AMnFIFOPNTR_FIFOWPNTR		GENMASK(7, 0)
