@@ -151,7 +151,7 @@
 
 /* A function called from the kernel */
 static int drpai_probe(struct platform_device *pdev);
-static int drpai_remove(struct platform_device *pdev);
+static void drpai_remove(struct platform_device *pdev);
 static int drpai_open(struct inode *inode, struct file *file);
 static int drpai_close(struct inode *inode, struct file *file);
 static int drpai_flush(struct file *file, fl_owner_t id);
@@ -353,7 +353,7 @@ static int drpai_probe(struct platform_device *pdev)
     return 0;
 }
 
-static int drpai_remove(struct platform_device *pdev)
+static void drpai_remove(struct platform_device *pdev)
 {
     DRPAI_DEBUG_PRINT("start.\n");
 
@@ -361,8 +361,6 @@ static int drpai_remove(struct platform_device *pdev)
     drpai_unregist_device();
 
     DRPAI_DEBUG_PRINT("end.\n");
-
-    return 0;
 }
 
 static int drpai_open(struct inode *inode, struct file *file)
