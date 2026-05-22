@@ -134,7 +134,7 @@
 
 /* A function called from the kernel */
 static int drp_probe(struct platform_device *pdev);
-static int drp_remove(struct platform_device *pdev);
+static void drp_remove(struct platform_device *pdev);
 static int drp_open(struct inode *inode, struct file *file);
 static int drp_close(struct inode *inode, struct file *file);
 static int drp_flush(struct file *file, fl_owner_t id);
@@ -324,12 +324,10 @@ static int drp_probe(struct platform_device *pdev)
     return ret;
 }
 
-static int drp_remove(struct platform_device *pdev)
+static void drp_remove(struct platform_device *pdev)
 {
     drp_unregist_driver();
     drp_unregist_device();
-
-    return 0;
 }
 
 static int drp_open(struct inode *inode, struct file *file)
