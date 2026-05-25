@@ -2620,7 +2620,7 @@
 		opencva0: opencva@C0000000 {
 			compatible = "renesas,rzv2h-opencva";
 			reg = <0x00 0xC0000000 0x00 0x07D00000>;
-			status = "disabled";
+			status = "okay";
 		};
 
 		drp1: drp1@18000000 {
@@ -2635,7 +2635,7 @@
 		codec0: codec {
 			reusable;
 			reg = <0x00 0xC7D00000 0x00 0x00300000>;
-			status = "disabled";
+			status = "okay";
 		};
 
 		tsu0: thermal@11000000 {
