@@ -1,0 +1,176 @@
+/* SPDX-License-Identifier: GPL-2.0+ */
+/*
+ * rzg2l-cru-regs.h--RZ/G2L (and alike SoCs) CRU Registers Definitions
+ *
+ * Copyright (C) 2024 Renesas Electronics Corp.
+ */
+
+#ifndef __RZG2L_CRU_REGS_H__
+#define __RZG2L_CRU_REGS_H__
+
+/* HW CRU Registers Definition */
+
+/* CRU Control Register */
+#define CRUnCTRL_VINSEL(x)		((x) << 0)
+
+/* CRU Interrupt Enable Register */
+#define CRUnIE_EFE			BIT(17)
+
+#define CRUnIE2_FSxE(x)			BIT(((x) * 3))
+#define CRUnIE2_FExE(x)			BIT(((x) * 3) + 1)
+
+/* CRU Interrupt Status Register */
+#define CRUnINTS_SFS			BIT(16)
+#define CRUnINTS2_FSS(x)		BIT((x) * 3)
+#define CRUnINTS2_FSxS(x)		BIT(((x) * 3))
+
+/* CRU Reset Register */
+#define CRUnRST_VRESETN			BIT(0)
+
+/* Memory Bank Base Address (Lower) Register for CRU Image Data */
+#define AMnMBxADDRL(x)			(AMnMB1ADDRL + (x) * 2)
+
+/* Memory Bank Base Address (Higher) Register for CRU Image Data */
+#define AMnMBxADDRH(x)			(AMnMB1ADDRH + (x) * 2)
+
+#define AMnMBVALID_MBVALID(x)		GENMASK(x, 0)
+
+#define AMnMBS_MBSTS			0x7
+
+#define AMnAXIATTR_AXILEN_MASK		GENMASK(3, 0)
+#define AMnAXIATTR_AXILEN		(0xf)
+
+/* AXI Master FIFO Pointer Register for CRU Image Data */
+#define AMnFIFOPNTR_FIFOWPNTR		GENMASK(7, 0)
+#define AMnFIFOPNTR_FIFOWPNTR_B0	AMnFIFOPNTR_FIFOWPNTR
+#define AMnFIFOPNTR_FIFOWPNTR_B1	GENMASK(15, 8)
+#define AMnFIFOPNTR_FIFORPNTR_Y		GENMASK(23, 16)
+#define AMnFIFOPNTR_FIFORPNTR_B0	AMnFIFOPNTR_FIFORPNTR_Y
+#define AMnFIFOPNTR_FIFORPNTR_UV	GENMASK(31, 24)
+#define AMnFIFOPNTR_FIFORPNTR_B1	AMnFIFOPNTR_FIFORPNTR_UV
+
+#define AMnIS_IS_MASK			GENMASK(14, 7)
+#define AMnIS_IS(x)			((x) << 7)
+
+/* AXI Master Transfer Stop Register for CRU Image Data */
+#define AMnAXISTP_AXI_STOP		BIT(0)
+
+/* AXI Master Transfer Stop Status Register for CRU Image Data */
+#define AMnAXISTPACK_AXI_STOP_ACK	BIT(0)
+
+/* CRU Image Processing Enable Register */
+#define ICnEN_ICEN			BIT(0)
+
+#define ICnSVC_SVC0(x)			(x)
+#define ICnSVC_SVC1(x)			((x) << 4)
+#define ICnSVC_SVC2(x)			((x) << 8)
+#define ICnSVC_SVC3(x)			((x) << 12)
+
+/* CRU Image Processing Main Control Register */
+#define ICnMC_DEMTHR			BIT(3)
+#define ICnMC_CSCTHR			BIT(5)
+#define ICnMC_INF(x)			((x) << 16)
+#define ICnMC_VCSEL(x)			((x) << 22)
+#define ICnMC_INF_MASK			GENMASK(21, 16)
+
+#define ICnMC_RAWSTTYP_RGRG		0
+#define ICnMC_RAWSTTYP_GRGR		BIT(24)
+#define ICnMC_RAWSTTYP_GBGB		BIT(25)
+#define ICnMC_RAWSTTYP_BGBG		(BIT(25) | BIT(24))
+#define ICnMC_RAWSTTYP_MASK		(BIT(25) | BIT(24))
+
+/* CRU Module Status Register */
+#define ICnMS_IA			BIT(2)
+
+/* CRU Test Image Generation Control 1 Register */
+#define ICnTICTRL1_TIEN			BIT(0)
+#define ICnTICTRL1_TIMODE		BIT(1)
+#define ICnTICTRL1_TIPTNY1(x)		((x) << 4)
+#define ICnTICTRL1_TIPTNU1(x)		((x) << 8)
+#define ICnTICTRL1_TIPTNV1(x)		((x) << 12)
+
+/* CRU Test Image Generation Control 2 Register */
+#define ICnTICTRL2_TIPTNY2(x)		((x) << 0)
+#define ICnTICTRL2_TIPTNU2(x)		((x) << 8)
+#define ICnTICTRL2_TIPTNV2(x)		((x) << 16)
+
+/* CRU Test Image Size Setting 1 Register */
+#define ICnTISIZE1_TIPPL(x)		((x) << 0)
+
+/* CRU Test Image Size Setting 2 Register */
+#define ICnTISIZE2_TIN(x)		((x) << 0)
+#define ICnTISIZE2_TIM(x)		((x) << 16)
+
+/* CRU Data Output Mode Register */
+#define ICnDMR_RGBMODE_RGB24		(0 << 0)
+#define ICnDMR_RGBMODE_XRGB32		(1 << 0)
+#define ICnDMR_RGBMODE_ABGR32		(2 << 0)
+#define ICnDMR_RGBMODE_ARGB32		(3 << 0)
+#define ICnDMR_YCMODE_YUYV		(0 << 4)
+#define ICnDMR_YCMODE_UYVY		(1 << 4)
+#define ICnDMR_YCMODE_NV16		(2 << 4)
+#define ICnDMR_YCMODE_GREY		(3 << 4)
+
+enum rzg2l_cru_common_regs {
+	CRUnCTRL,	/* CRU Control */
+	CRUnIE,		/* CRU Interrupt Enable */
+	CRUnIE2,	/* CRU Interrupt Enable(2) */
+	CRUnINTS,	/* CRU Interrupt Status */
+	CRUnINTS2,	/* CRU Interrupt Status(2) */
+	CRUnRST,	/* CRU Reset */
+
+	/* Memory Bank Address Registers */
+	AMnMB1ADDRL,	/* Bank 1 Address (Lower) for CRU Image Data */
+	AMnMB1ADDRH,	/* Bank 1 Address (Higher) for CRU Image Data */
+	AMnMB2ADDRL,    /* Bank 2 Address (Lower) for CRU Image Data */
+	AMnMB2ADDRH,    /* Bank 2 Address (Higher) for CRU Image Data */
+	AMnMB3ADDRL,    /* Bank 3 Address (Lower) for CRU Image Data */
+	AMnMB3ADDRH,    /* Bank 3 Address (Higher) for CRU Image Data */
+	AMnMB4ADDRL,    /* Bank 4 Address (Lower) for CRU Image Data */
+	AMnMB4ADDRH,    /* Bank 4 Address (Higher) for CRU Image Data */
+	AMnMB5ADDRL,    /* Bank 5 Address (Lower) for CRU Image Data */
+	AMnMB5ADDRH,    /* Bank 5 Address (Higher) for CRU Image Data */
+	AMnMB6ADDRL,    /* Bank 6 Address (Lower) for CRU Image Data */
+	AMnMB6ADDRH,    /* Bank 6 Address (Higher) for CRU Image Data */
+	AMnMB7ADDRL,    /* Bank 7 Address (Lower) for CRU Image Data */
+	AMnMB7ADDRH,    /* Bank 7 Address (Higher) for CRU Image Data */
+	AMnMB8ADDRL,    /* Bank 8 Address (Lower) for CRU Image Data */
+	AMnMB8ADDRH,    /* Bank 8 Address (Higher) for CRU Image Data */
+
+	/* Extra registers present in the first version */
+	AMnUVAOFL,  /* UV Data Address Offset (Lower) Register */
+	AMnUVAOFH,  /* UV Data Address Offset (Higher) Register */
+
+	/* Memory Bank control/status */
+	AMnMBVALID,	/* Memory Bank Enable for CRU Image Data */
+	AMnMBS,		/* Memory Bank Status for CRU Image Data */
+	AMnMADRSL,	/* VD Memory Address Lower Status Register */
+	AMnMADRSH,	/* VD Memory Address Higher Status Register */
+
+	/* AXI bus control */
+	AMnAXIATTR,	/* AXI Master Transfer Setting Register for CRU Image Data */
+	AMnFIFO,	/* AXI-VD Master FIFO Setting Register */
+	AMnFIFOPNTR,	/* AXI Master FIFO Pointer for CRU Image Data */
+	AMnAXISTP,	/* AXI Master Transfer Stop for CRU Image Data */
+	AMnAXISTPACK,	/* AXI Master Transfer Stop Status for CRU Image Data */
+
+	/* Image processing control */
+	AMnIS,		/* Image Stride Setting Register */
+	ICnEN,		/* CRU Image Processing Enable */
+	ICnSVCNUM,	/* CRU SVC Number Register */
+	ICnSVC,		/* CRU VC Select Register */
+	ICnMC,		/* CRU Image Processing Main Control */
+	ICnIPMC_C0,	/* CRU Image Converter Main Control 0 */
+	ICnMS,		/* CRU Module Status */
+	ICnDMR,		/* CRU Data Output Mode */
+
+	/* Test image generation */
+	ICnTICTRL1, /* Test Image Generation Control 1 */
+	ICnTICTRL2, /* Test Image Generation Control 2 */
+	ICnTISIZE1, /* Test Image Size Setting 1 */
+	ICnTISIZE2, /* Test Image Size Setting 2 */
+
+	RZG2L_CRU_MAX_REG,
+};
+
+#endif /* __RZG2L_CRU_REGS_H__ */

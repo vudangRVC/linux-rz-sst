@@ -815,14 +815,14 @@ irqreturn_t rzg2l_cru_irq(int irq, void *data)
 		prev_slot[cru->id] = slot;
 	} else {
 		/*
-		 * AXI-Bus congestion maybe occurred.
-		 * Set auto recovery mode to clear all FIFOs
-		 * and resume transmission.
-		 */
+		* AXI-Bus congestion maybe occurred.
+		* Set auto recovery mode to clear all FIFOs
+		* and resume transmission.
+		*/
 		rzg2l_cru_write(cru, AMnFIFO, 0);
 		prev_slot[cru->id] = -1;
 
-		dev_dbg(cru->dev, "Dropping frame %u with CRU channel %d\n",
+		printk("Dropping frame %u with CRU channel %d\n",
 			cru->sequence, cru->id);
 		goto done;
 	}
@@ -1238,6 +1238,8 @@ static const struct vb2_ops rzg2l_cru_qops = {
 	.buf_queue		= rzg2l_cru_buffer_queue,
 	.start_streaming	= rzg2l_cru_start_streaming_vq,
 	.stop_streaming		= rzg2l_cru_stop_streaming_vq,
+	.wait_prepare = vb2_ops_wait_prepare,
+	.wait_finish  = vb2_ops_wait_finish,
 };
 
 void rzg2l_cru_dma_unregister(struct rzg2l_cru_dev *cru)
@@ -1685,9 +1687,7 @@ static int rzg2l_cru_video_link_validate(struct media_link *link)
 
 	cru = container_of(media_entity_to_video_device(link->sink->entity),
 			   struct rzg2l_cru_dev, vdev);
-	video_fmt = rzg2l_cru_ip_code_to_fmt(fmt.format.code);
-	if (!video_fmt)
-		return -EPIPE;
+	video_fmt = rzg2l_cru_ip_format_to_fmt(cru->format.pixelformat);
 
 	if (fmt.format.width != cru->format.width ||
 	    fmt.format.height != cru->format.height ||
