@@ -20,6 +20,7 @@
 #define CPG_PL1_DDIV		(0x200)
 #define CPG_PL2_DDIV		(0x204)
 #define CPG_PL3A_DDIV		(0x208)
+#define CPG_PL3B_DDIV		(0x20C)
 #define CPG_PL6_DDIV		(0x210)
 #define CPG_PL3C_SDIV		(0x214)
 #define CPG_CLKSTATUS		(0x280)
@@ -74,6 +75,7 @@
 #define DIVPL3C		DDIV_PACK(CPG_PL3A_DDIV, 8, 3)
 #define DIVPL3E		DDIV_PACK(CPG_PL3C_SDIV, 8, 5)
 #define DIVGPU		DDIV_PACK(CPG_PL6_DDIV, 0, 2)
+#define DIVPL3CLK200FIX		DDIV_PACK(CPG_PL3B_DDIV, 0, 3)
 
 #define SEL_PLL_PACK(offset, bitpos, size) \
 		(((offset) << 20) | ((bitpos) << 12) | ((size) << 8))
