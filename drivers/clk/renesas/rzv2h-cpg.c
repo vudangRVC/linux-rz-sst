@@ -55,12 +55,22 @@
 #define CPG_PLL_STBY_RESETB_WEN	BIT(16)
 #define CPG_PLL_STBY_SSC_EN	BIT(2)
 #define CPG_PLL_STBY_SSC_EN_WEN BIT(18)
+
 #define CPG_PLL_CLK1(x)		((x) + 0x004)
-#define CPG_PLL_CLK1_KDIV(x)	((s16)FIELD_GET(GENMASK(31, 16), (x)))
-#define CPG_PLL_CLK1_MDIV(x)	FIELD_GET(GENMASK(15, 6), (x))
-#define CPG_PLL_CLK1_PDIV(x)	FIELD_GET(GENMASK(5, 0), (x))
+
+#define CPG_PLL_CLK1_KDIV_MASK  GENMASK(31, 16)
+#define CPG_PLL_CLK1_MDIV_MASK  GENMASK(15, 6)
+#define CPG_PLL_CLK1_PDIV_MASK  GENMASK(5, 0)
+
+#define CPG_PLL_CLK1_KDIV(x)	((s16)FIELD_GET(CPG_PLL_CLK1_KDIV_MASK, (x)))
+#define CPG_PLL_CLK1_MDIV(x)	FIELD_GET(CPG_PLL_CLK1_MDIV_MASK, (x))
+#define CPG_PLL_CLK1_PDIV(x)	FIELD_GET(CPG_PLL_CLK1_PDIV_MASK, (x))
+
 #define CPG_PLL_CLK2(x)		((x) + 0x008)
-#define CPG_PLL_CLK2_SDIV(x)	FIELD_GET(GENMASK(2, 0), (x))
+
+#define CPG_PLL_CLK2_SDIV_MASK	GENMASK(2, 0)
+#define CPG_PLL_CLK2_SDIV(x)	FIELD_GET(CPG_PLL_CLK2_SDIV_MASK, (x))
+
 #define CPG_PLL_MON(x)		((x) + 0x010)
 #define CPG_PLL_MON_RESETB	BIT(0)
 #define CPG_PLL_MON_LOCK	BIT(4)
@@ -322,6 +332,14 @@ static unsigned long rzv2h_cpg_plldsi_div_recalc_rate(struct clk_hw *hw,
 	return DIV_ROUND_CLOSEST_ULL(parent_rate, div);
 }
 
+static struct rzv2h_pll_dsi_info *rzv2h_get_pll_dsi_info(struct clk_hw *pll_dsi,
+							 struct rzv2h_cpg_priv *priv)
+{
+	struct pll_clk *pll_clk = to_pll(pll_dsi);
+
+	return &priv->pll_dsi_info[pll_clk->pll.instance];
+}
+
 static int rzv2h_cpg_plldsi_div_determine_rate(struct clk_hw *hw,
 					       struct clk_rate_request *req)
 {
@@ -354,7 +372,7 @@ exit_determine_rate:
 	return 0;
 };
 
-tatic int rzv2h_cpg_plldsi_div_set_rate(struct clk_hw *hw,
+static int rzv2h_cpg_plldsi_div_set_rate(struct clk_hw *hw,
 					 unsigned long rate,
 					 unsigned long parent_rate)
 {
@@ -485,14 +503,15 @@ static int rzv2h_cpg_pll_set_rate(struct pll_clk *pll_clk,
 	}
 
 	/* Output clock setting 1 */
-	writel(FIELD_PREP(CPG_PLL_CLK1_KDIV, (u16)params->k) |
-	       FIELD_PREP(CPG_PLL_CLK1_MDIV, params->m) |
-	       FIELD_PREP(CPG_PLL_CLK1_PDIV, params->p),
+	writel(FIELD_PREP(CPG_PLL_CLK1_KDIV_MASK, (u16)params->k) |
+	       FIELD_PREP(CPG_PLL_CLK1_MDIV_MASK, params->m) |
+	       FIELD_PREP(CPG_PLL_CLK1_PDIV_MASK, params->p),
 	       priv->base + CPG_PLL_CLK1(offset));
 
 	/* Output clock setting 2 */
 	val = readl(priv->base + CPG_PLL_CLK2(offset));
-	writel((val & ~CPG_PLL_CLK2_SDIV) | FIELD_PREP(CPG_PLL_CLK2_SDIV, params->s),
+	writel((val & ~CPG_PLL_CLK2_SDIV_MASK) |
+	       FIELD_PREP(CPG_PLL_CLK2_SDIV_MASK, params->s),
 	       priv->base + CPG_PLL_CLK2(offset));
 
 	/* Put PLL to normal mode */
@@ -589,16 +608,6 @@ static unsigned long rzv2h_ddiv_recalc_rate(struct clk_hw *hw,
 				   divider->flags, divider->width);
 }
 
-
-static long rzv2h_ddiv_round_rate(struct clk_hw *hw, unsigned long rate,
-				unsigned long *prate)
-{
-	struct clk_divider *divider = to_clk_divider(hw);
-
-	return divider_round_rate(hw, rate, prate, divider->table,
-				divider->width, divider->flags);
-}
-
 static int rzv2h_ddiv_determine_rate(struct clk_hw *hw,
 				     struct clk_rate_request *req)
 {
@@ -652,13 +661,6 @@ ddiv_timeout:
 	spin_unlock_irqrestore(divider->lock, flags);
 	return ret;
 }
-
-static const struct clk_ops rzv2h_ddiv_clk_divider_ops = {
-	.recalc_rate = rzv2h_ddiv_recalc_rate,
-	.round_rate = rzv2h_ddiv_round_rate,
-	.determine_rate = rzv2h_ddiv_determine_rate,
-	.set_rate = rzv2h_ddiv_set_rate,
-};
 
 static const struct clk_ops rzv2h_ddiv_clk_divider_ops = {
 	.recalc_rate = rzv2h_ddiv_recalc_rate,
@@ -1481,6 +1483,36 @@ static int __init rzv2h_cpg_probe(struct platform_device *pdev)
 
 	return 0;
 }
+
+static int rzv2h_cpg_pm_suspend(struct device *dev)
+{
+	struct rzv2h_cpg_priv *priv = dev_get_drvdata(dev);
+	const struct rzv2h_cpg_info *info = priv->info;
+	int i;
+
+	for (i = 0; i < info->num_core_clks; i++) {
+		if ((info->core_clks[i].type == CLK_TYPE_PLLDSI) ||
+		    (info->core_clks[i].type == CLK_TYPE_PLL)) {
+			priv->cache[i].pll_clk1 = readl(priv->base +
+						  CPG_PLL_CLK1(info->core_clks[i].cfg.pll.offset));
+			priv->cache[i].pll_clk2 = readl(priv->base +
+						  CPG_PLL_CLK2(info->core_clks[i].cfg.pll.offset));
+			continue;
+		}
+
+		if (info->core_clks[i].type == CLK_TYPE_SMUX) {
+			priv->cache[i].mux = readl(priv->base + info->core_clks[i].cfg.smux.offset);
+			continue;
+		}
+
+		if (info->core_clks[i].type == CLK_TYPE_DDIV) {
+			priv->cache[i].div = readl(priv->base + info->core_clks[i].cfg.ddiv.offset);
+			continue;
+		}
+	};
+
+	return 0;
+};
 
 static int rzv2h_cpg_pm_resume(struct device *dev)
 {

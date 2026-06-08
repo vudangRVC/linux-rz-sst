@@ -169,6 +169,14 @@ struct fixed_mod_conf {
 
 #define FIXED_MOD_CONF_XSPI	FIXED_MOD_CONF_PACK(5, 1)
 
+#define CPG_SSEL(x)		(0x300 + 4 * (x))
+#define CPG_CDDIV(x)		(0x400 + 4 * (x))
+#define CPG_CSDIV(x)		(0x500 + 4 * (x))
+
+#define SSELx_SELCTLy(x, y)		SMUX_PACK(CPG_SSEL(x), (y) * 4, 1)
+#define CDDIVx_DIVCTLy(x, y, w)		DDIV_PACK(CPG_CDDIV(x), (y) * 4, w, (x) * 4 + (y))
+#define CSDIVx_DIVCTLy(x, y, w)		DDIV_PACK(CPG_CSDIV(x), (y) * 4, w, -1)
+
 /**
  * Definitions of CPG Core Clocks
  *
