@@ -178,3 +178,7 @@
 &adc {
 	status = "okay";
 };
+
+&ostm0 {
+	status = "disabled";
+};
