@@ -255,15 +255,27 @@ static void rzsbc_ft5406_work(struct work_struct *work)
 
 void rzsbc_ft5406_start_polling(void)
 {
-	if (g_ts_data == NULL) {
-		LOG_ERR("touch is not ready\n");
-	} else if (g_ts_data->is_polling == 1) {
-		LOG_ERR("touch is busy\n");
-	} else {
-		g_ts_data->is_polling = 1;
-		schedule_work(&g_ts_data->ft5406_work);
-	}
-	g_mcu_ready = 1;
+    int timeout = 100;
+
+    /* Wait for FT5406 to finish probing */
+    while (g_ts_data == NULL && timeout > 0) {
+        msleep(50);
+        timeout--;
+    }
+
+    if (g_ts_data == NULL) {
+        LOG_ERR("touch is not ready (timeout)\n");
+        return;
+    }
+
+    if (g_ts_data->is_polling == 1) {
+        LOG_ERR("touch is busy\n");
+    } else {
+        msleep(300);  /* let FT5406 boot */
+        g_ts_data->is_polling = 1;
+        schedule_work(&g_ts_data->ft5406_work);
+    }
+    g_mcu_ready = 1;
 }
 EXPORT_SYMBOL_GPL(rzsbc_ft5406_start_polling);
 
@@ -284,15 +296,12 @@ static int rzsbc_ft5406_probe(struct i2c_client *client)
 	i2c_set_clientdata(client, g_ts_data);
 
 	//while(!rzsbc_mcu_is_connected() && !rzsbc_mcu_ili9881c_is_connected() && timeout > 0) {
-	while (!rzsbc_mcu_is_connected() && timeout > 0) {
-		msleep(50);
-		timeout--;
-	}
-
-	if (timeout == 0) {
-		LOG_ERR("wait connected timeout\n");
-		ret = -ENODEV;
-		goto timeout_failed;
+	if (!rzsbc_mcu_is_connected()) {
+		LOG_INFO("MCU not ready, deferring probe\n");
+		i2c_set_clientdata(client, NULL);
+		kfree(g_ts_data);
+		g_ts_data = NULL;
+		return -EPROBE_DEFER;
 	}
 
 #if (0)
@@ -360,7 +369,6 @@ static void rzsbc_ft5406_remove(struct i2c_client *client)
 	cancel_work_sync(&g_ts_data->ft5406_work);
 	if (g_ts_data->input_dev) {
 		input_unregister_device(g_ts_data->input_dev);
-		input_free_device(g_ts_data->input_dev);
 	}
 	kfree(g_ts_data);
 	g_ts_data = NULL;
@@ -384,4 +392,3 @@ module_i2c_driver(rzsbc_ft5406_driver);
 
 MODULE_DESCRIPTION("RZG2L SBC BOARD FT5406 Touch driver");
 MODULE_LICENSE("GPL");
-

@@ -124,6 +124,10 @@ struct riic_dev {
 	struct clk *clk;
 	struct reset_control *rstc;
 	struct i2c_timings i2c_t;
+	/* Cached timing parameters for re-init on bus recovery */
+	int cks;
+	int brl;
+	int brh;
 };
 
 struct riic_irq_desc {
@@ -147,81 +151,128 @@ static inline void riic_clear_set_bit(struct riic_dev *riic, u8 clear, u8 set, u
 	riic_writeb(riic, (riic_readb(riic, reg) & ~clear) | set, reg);
 }
 
+/* Pure hardware init, no PM calls */
+/*
+ * Re-initialize the controller registers without touching runtime PM.
+ * Used by riic_bus_barrier() to fully reset a wedged controller.
+ * Caller must already hold a runtime PM reference.
+ */
+static void riic_init_hw_regs(struct riic_dev *riic)
+{
+    bool fast_mode_plus = riic->info->fast_mode_plus;
+    struct i2c_timings *t = &riic->i2c_t;
+
+    /* Set SCLE and NFE */
+    riic_clear_set_bit(riic, 0, ICFER_SCLE | ICFER_NFE, RIIC_ICFER);
+
+    /* Reset state machine: IICRST first, then ICE */
+    riic_writeb(riic, ICCR1_IICRST | ICCR1_SOWP, RIIC_ICCR1);
+    riic_clear_set_bit(riic, 0, ICCR1_ICE, RIIC_ICCR1);
+
+    /* Reapply timing using cached values */
+    riic_writeb(riic, ICMR1_CKS(riic->cks), RIIC_ICMR1);
+    riic_writeb(riic, riic->brh | ICBR_RESERVED, RIIC_ICBRH);
+    riic_writeb(riic, riic->brl | ICBR_RESERVED, RIIC_ICBRL);
+    riic_writeb(riic, 0, RIIC_ICSER);
+    riic_writeb(riic, ICMR3_ACKWP | ICMR3_RDRFS, RIIC_ICMR3);
+
+    if (fast_mode_plus && t->bus_freq_hz > I2C_MAX_FAST_MODE_FREQ)
+        riic_clear_set_bit(riic, 0, ICFER_FMPE, RIIC_ICFER);
+
+    /* Deassert IICRST — controller now ready */
+    riic_clear_set_bit(riic, ICCR1_IICRST, 0, RIIC_ICCR1);
+}
+
 static int riic_bus_barrier(struct riic_dev *riic)
 {
-	int ret;
-	u8 val;
+    int ret;
+    u8 val;
 
-	/*
-	 * The SDA line can still be low even when BBSY = 0. Therefore, after checking
-	 * the BBSY flag, also verify that the SDA and SCL lines are not being held low.
-	 */
-	ret = readb_poll_timeout(riic->base + riic->info->regs[RIIC_ICCR2], val,
-				 !(val & ICCR2_BBSY), 10, riic->adapter.timeout);
-	if (ret)
-		return i2c_recover_bus(&riic->adapter);
+    ret = readb_poll_timeout(riic->base + riic->info->regs[RIIC_ICCR2], val,
+                             !(val & ICCR2_BBSY), 10, 1000);
+    if (!ret) {
+        if ((riic_readb(riic, RIIC_ICCR1) & (ICCR1_SDAI | ICCR1_SCLI)) ==
+             (ICCR1_SDAI | ICCR1_SCLI))
+            return 0;
+    }
 
-	if ((riic_readb(riic, RIIC_ICCR1) & (ICCR1_SDAI | ICCR1_SCLI)) !=
-	     (ICCR1_SDAI | ICCR1_SCLI))
-		return i2c_recover_bus(&riic->adapter);
+    dev_warn(riic->adapter.dev.parent,
+             "Bus stuck (ICCR1=0x%02x ICCR2=0x%02x), recovering\n",
+             riic_readb(riic, RIIC_ICCR1), riic_readb(riic, RIIC_ICCR2));
 
-	return 0;
+    /* Disable controller so generic recovery can toggle SCL pin */
+    riic_writeb(riic, 0, RIIC_ICCR1);
+    udelay(10);
+
+    /* Now SCL toggling can drive the wire */
+    i2c_recover_bus(&riic->adapter);
+
+    /* Re-init controller fully */
+    riic_init_hw_regs(riic);
+
+    /* Verify */
+    if ((riic_readb(riic, RIIC_ICCR1) & (ICCR1_SDAI | ICCR1_SCLI)) !=
+         (ICCR1_SDAI | ICCR1_SCLI)) {
+        dev_err(riic->adapter.dev.parent,
+                "Bus still stuck after recovery (ICCR1=0x%02x)\n",
+                riic_readb(riic, RIIC_ICCR1));
+        return -EIO;
+    }
+    return 0;
 }
 
 static int riic_xfer(struct i2c_adapter *adap, struct i2c_msg msgs[], int num)
 {
-	struct riic_dev *riic = i2c_get_adapdata(adap);
-	struct device *dev = adap->dev.parent;
-	unsigned long time_left;
-	int i, ret;
-	u8 start_bit, val;
+    struct riic_dev *riic = i2c_get_adapdata(adap);
+    struct device *dev = adap->dev.parent;
+    unsigned long time_left;
+    int i, ret;
+    u8 start_bit, val;
 
-	ret = pm_runtime_resume_and_get(dev);
-	if (ret)
-		return ret;
+    ret = pm_runtime_resume_and_get(dev);
+    if (ret)
+        return ret;
 
-	riic->err = riic_bus_barrier(riic);
-	if (riic->err)
-		goto out;
+    /* Defensive: clear any leftover state from a previous failed transfer */
+    riic_writeb(riic, 0, RIIC_ICIER);
 
-	reinit_completion(&riic->msg_done);
+    riic->err = 0;
+    reinit_completion(&riic->msg_done);
+    riic_writeb(riic, 0, RIIC_ICSR2);
 
-	riic_writeb(riic, 0, RIIC_ICSR2);
+    for (i = 0, start_bit = ICCR2_ST; i < num; i++) {
+        riic->bytes_left = RIIC_INIT_MSG;
+        riic->buf = msgs[i].buf;
+        riic->msg = &msgs[i];
+        riic->is_last = (i == num - 1);
 
-	for (i = 0, start_bit = ICCR2_ST; i < num; i++) {
-		riic->bytes_left = RIIC_INIT_MSG;
-		riic->buf = msgs[i].buf;
-		riic->msg = &msgs[i];
-		riic->is_last = (i == num - 1);
+        riic_writeb(riic, ICIER_NAKIE | ICIER_TIE, RIIC_ICIER);
+        riic_writeb(riic, start_bit, RIIC_ICCR2);
 
-		riic_writeb(riic, ICIER_NAKIE | ICIER_TIE, RIIC_ICIER);
+        time_left = wait_for_completion_timeout(&riic->msg_done,
+                                                riic->adapter.timeout);
+        if (time_left == 0)
+            riic->err = -ETIMEDOUT;
+        if (riic->err)
+            break;
 
-		riic_writeb(riic, start_bit, RIIC_ICCR2);
+        start_bit = ICCR2_RS;
+    }
 
-		time_left = wait_for_completion_timeout(&riic->msg_done, riic->adapter.timeout);
-		if (time_left == 0)
-			riic->err = -ETIMEDOUT;
+    /* Always wait for BBSY to clear, even on error */
+    readb_relaxed_poll_timeout(riic->base + riic->info->regs[RIIC_ICCR2],
+                               val, !(val & ICCR2_BBSY), 10, 10000);
 
-		if (riic->err)
-			break;
-
-		start_bit = ICCR2_RS;
-	}
-
-	/* Should check bus state after finishing transfer */
-	if (!riic->err) {
-		time_left = readb_relaxed_poll_timeout(riic->base + riic->info->regs[RIIC_ICCR2],
-								val, !(val & ICCR2_BBSY), 10, 100);
-		if (time_left)
-			dev_warn(riic->adapter.dev.parent,
-					"The i2c bus is still busy\n");
-	}
+    if (!riic->err) {
+        if (riic_readb(riic, RIIC_ICCR2) & ICCR2_BBSY)
+            dev_warn(riic->adapter.dev.parent,
+                     "The i2c bus is still busy\n");
+    }
 
 out:
-	pm_runtime_mark_last_busy(dev);
-	pm_runtime_put_autosuspend(dev);
-
-	return riic->err ?: num;
+    pm_runtime_mark_last_busy(dev);
+    pm_runtime_put_autosuspend(dev);
+    return riic->err ?: num;
 }
 
 static irqreturn_t riic_tdre_isr(int irq, void *data)
@@ -441,6 +492,17 @@ static int riic_init_hw(struct riic_dev *riic)
 	pr_debug("i2c-riic: freq=%lu, duty=%d, fall=%lu, rise=%lu, cks=%d, brl=%d, brh=%d\n",
 		 rate / total_ticks, ((brl + 3) * 100) / (brl + brh + 6),
 		 t->scl_fall_ns / ns_per_tick, t->scl_rise_ns / ns_per_tick, cks, brl, brh);
+
+/* Adjust for min register values for when SCLE=1 and NFE=1 */
+	if (brl < 1)
+		brl = 1;
+	if (brh < 1)
+		brh = 1;
+
+	/* Cache these for use by riic_bus_barrier() during recovery */
+	riic->cks = cks;
+	riic->brl = brl;
+	riic->brh = brh;
 
 	ret = pm_runtime_resume_and_get(dev);
 	if (ret)

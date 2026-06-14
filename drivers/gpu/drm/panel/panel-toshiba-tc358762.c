@@ -499,41 +499,34 @@ static int tc358762_prepare(struct drm_panel *panel)
 
 static int tc358762_enable(struct drm_panel *panel)
 {
-	struct tc358762 *p = to_tc358762(panel);
+    struct tc358762 *p = to_tc358762(panel);
 
-	/* Skip if panel is already enabled or DCS init is available */
-	if (p->enabled || p->init)
-		return 0;
-	pr_info("panel enable\n");
+    if (p->enabled || p->init)
+        return 0;
+    pr_info("panel enable\n");
 
-	if (trigger_bridge) {
-		pr_info("rzsbc_mcu_screen_power_up");
-		rzsbc_mcu_screen_power_up();
+    if (trigger_bridge) {
+        pr_info("rzsbc_mcu_screen_power_up");
+        rzsbc_mcu_screen_power_up();   /* runs 8500/8501/8104 [4] */
+        msleep(100);
+        // rzsbc_ft5406_start_polling();  /* schedules ft5406_work [6] */
+    }
 
-		/* Some particulare rpi panel need powering on/off during suspend/resume */
-		/* to avoid the flicker about 7 seconds */
-		//trigger_bridge = 0;
+    tc358762_dsi_init(p);
 
-		msleep(100);
-		rzsbc_ft5406_start_polling();
-	}
+    if (p->desc && p->desc->delay.enable)
+        msleep(p->desc->delay.enable);
 
-	tc358762_dsi_init(p);
+    if (p->backlight) {
+        p->backlight->props.power = FB_BLANK_UNBLANK;
+        backlight_update_status(p->backlight);
+    } else {
+        pr_info("panel enable: no backlight device\n");
+        rzsbc_mcu_set_bright(0xFF);    /* [4] */
+    }
 
-	if (p->desc && p->desc->delay.enable)
-		msleep(p->desc->delay.enable);
-
-	if (p->backlight) {
-		p->backlight->props.power = FB_BLANK_UNBLANK;
-		backlight_update_status(p->backlight);
-	} else {
-		pr_info("panel enable: no backlight device\n");
-		rzsbc_mcu_set_bright(0xFF);
-	}
-
-	p->enabled = true;
-
-	return 0;
+    p->enabled = true;
+    return 0;
 }
 
 static int tc358762_get_modes(struct drm_panel *panel,
@@ -756,10 +749,8 @@ int tc358762_dsi_probe(struct mipi_dsi_device *dsi)
 	if (!id)
 		return -ENODEV;
 
-	while (!rzsbc_mcu_is_connected() && timeout > 0) {
-		msleep(50); // increase to probe if needed
-		timeout--;
-	}
+	if (!rzsbc_mcu_is_connected())
+		return -EPROBE_DEFER;
 
 	desc = id->data;
 	desc = (struct bridge_desc *) dsi_of_match[0].data;
