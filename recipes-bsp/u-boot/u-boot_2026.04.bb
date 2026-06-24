@@ -8,10 +8,11 @@ LICENSE = "MIT"
 LIC_FILES_CHKSUM = "file://${COMMON_LICENSE_DIR}/MIT;md5=0835ade698e0bcf8506ecda2f7b4f302"
 
 # u-boot source code repository
-UBOOT_URL = "git://github.com/Renesas-SST/u-boot.git"
-BRANCH = "styhead/rz-cmn"
+UBOOT_URL = "git://github.com/vudangRVC/u-boot-sst.git"
+BRANCH = "styhead/rz-cmn-sparrowhawk"
+SRCREV = "7f62ab1c24cd66bc0f31055b6251cecfb36cee5d"
+
 SRC_URI = "${UBOOT_URL};name=machine;protocol=https;branch=${BRANCH}"
-SRCREV_machine = "${AUTOREV}"
 
 FILES:${PN} = "/boot ${sysconfdir}"
 
@@ -26,9 +27,18 @@ DEVICETREE_NAME:rz-cmn = " \
     rzv2h-rdk-ver1 \
     rs-g2l100 \
     imdt-v2h-sbc \
+    r8a779g3-sparrow-hawk \
 "
 
 # Install u-boot-nodtb.bin and u-boot device tree to temp location
+do_compile[depends] += "platform-gen:do_deploy"
+
+do_compile:prepend:rz-cmn () {
+    for settings_bin in ${DEPLOY_DIR_IMAGE}/target/images/*-platform-settings.bin; do
+        [ -f "$settings_bin" ] && cp "$settings_bin" ${KCONFIG_CONFIG_ROOTDIR}/
+    done
+}
+
 do_install() {
     install -d ${D}/boot
     install -d ${D}/boot/dtbs
@@ -47,6 +57,8 @@ do_deploy() {
     for dtb_name in ${DEVICETREE_NAME}; do
         install -m 644 ${D}/boot/dtbs/${dtb_name}.dtb ${DEPLOYDIR}/target/images/u-boot/dtbs
     done
+
+    install -m 644 ${KCONFIG_CONFIG_ROOTDIR}/flash.bin ${DEPLOYDIR}/target/images/u-boot/
 }
 
 addtask deploy after do_install
