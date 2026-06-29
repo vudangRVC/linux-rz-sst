@@ -1312,7 +1312,7 @@
 		};
 
 		cpg: clock-controller@11010000 {
-			compatible = "renesas,r9a07g044-cpg";
+			compatible = "renesas,r9a07g044-cpg", "syscon";
 			reg = <0 0x11010000 0 0x10000>;
 			clocks = <&extal_clk>;
 			clock-names = "extal";
@@ -1322,7 +1322,7 @@
 		};
 
 		sysc: system-controller@11020000 {
-			compatible = "renesas,r9a07g044-sysc";
+			compatible = "renesas,r9a07g044-sysc", "syscon";
 			reg = <0 0x11020000 0 0x10000>;
 			interrupts = <GIC_SPI 42 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 43 IRQ_TYPE_LEVEL_HIGH>,
@@ -1333,25 +1333,16 @@
 			status = "disabled";
 		};
 
-		cm33_rproc: cm33 {
+		cm33: remoteproc@8000000 {
 			compatible = "renesas,rz-cm33";
-			reg = <0x0 0x00010000 0x0 0x0000800>,
-					<0x0 0x0001FF80 0x0 0x0000080>,
-					<0x0 0x40010000 0x0 0x3EF0000>;
-			reg-names = "cm33_sram_ns", "cm33_sram_s", "cm33_ddr";
-			memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
+			reg = <0x0 0x8000000 0x0 0x10000>;
 			renesas,rz-cpg = <&cpg>;
 			renesas,rz-sysc = <&sysc>;
-			renesas,rz-bootaddrs = <0x1001FF80>, <0x00010000>;
-			renesas,rz-rsctbl = <0x42F00000>;
-			clocks = <&cpg CPG_MOD R9A07G054_CM33_CLKIN>,
-						<&cpg CPG_MOD R9A07G054_CM33_TSCLK>;
-			clock-names = "clkin", "tsclk";
-			resets = <&cpg R9A07G054_CM33_NPORESET>,
-							<&cpg R9A07G054_CM33_NSYSRESET>,
-							<&cpg R9A07G054_CM33_MISCRESETN>;
-			reset-names = "nporeset", "nsysreset", "miscresetn";
-			power-domains = <&cpg>;
+			resets = <&cpg R9A07G044_CM33_NPORESET>,
+				 <&cpg R9A07G044_CM33_NSYSRESET>,
+				 <&cpg R9A07G044_CM33_MISCRESETN>;
+			reset-names = "cm33reset0", "cm33reset1", "cm33reset2";
+			renesas,rz-bootaddrs = <0x00000000 0x00000000>;
 			status = "okay";
 		};
 

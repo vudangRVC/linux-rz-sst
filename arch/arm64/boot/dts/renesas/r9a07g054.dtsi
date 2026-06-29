@@ -1477,7 +1477,7 @@
 			resets = <&cpg R9A07G054_CM33_NPORESET>,
 							<&cpg R9A07G054_CM33_NSYSRESET>,
 							<&cpg R9A07G054_CM33_MISCRESETN>;
-			reset-names = "nporeset", "nsysreset", "miscresetn";
+			reset-names = "cm33reset2", "cm33reset0", "cm33reset1";
 			power-domains = <&cpg>;
 			status = "okay";
 		};

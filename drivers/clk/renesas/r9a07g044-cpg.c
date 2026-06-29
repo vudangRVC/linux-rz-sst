@@ -236,7 +236,7 @@ static const struct {
 };
 
 static const struct {
-	struct rzg2l_mod_clk common[86];
+	struct rzg2l_mod_clk common[87];
 #ifdef CONFIG_CLK_R9A07G054
 	struct rzg2l_mod_clk drp[5];
 #endif
@@ -248,6 +248,8 @@ static const struct {
 					0x518, 0, MSTOP(BUS_PERI_CPU, BIT(13))),
 		DEF_MOD("ia55_clk",	R9A07G044_IA55_CLK, R9A07G044_CLK_P1,
 					0x518, 1, MSTOP(BUS_PERI_CPU, BIT(13))),
+		DEF_MOD("mhu_pclk",	R9A07G044_MHU_PCLK, R9A07G044_CLK_P0,
+					0x51c, 0, MSTOP(BUS_PERI_CPU, BIT(14))),
 		DEF_MOD("dmac_aclk",	R9A07G044_DMAC_ACLK, R9A07G044_CLK_P1,
 					0x52c, 0, MSTOP(BUS_REG1, BIT(2))),
 		DEF_MOD("dmac_pclk",	R9A07G044_DMAC_PCLK, CLK_P1_DIV2,
@@ -572,7 +574,7 @@ const struct rzg2l_cpg_info r9a07g054_cpg_info = {
 
 	/* Resets */
 	.resets = r9a07g044_resets,
-	.num_resets = R9A07G054_STPAI_ARESETN + 1, /* Last reset ID + 1 */
+	.num_resets = R9A07G054_CM33_MISCRESETN + 1, /* Last reset ID + 1 */
 
 	.has_clk_mon_regs = true,
 };
