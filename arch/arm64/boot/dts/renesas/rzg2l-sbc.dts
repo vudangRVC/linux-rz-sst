@@ -880,7 +880,8 @@
 	};
 };
 
+
 &cm33 {
-	memory-region = <&cm33_image>, <&cm33_sram>;
-	firmware-name = "rzv2l_cm33_rpmsg_linux-rtos_demo.elf";
+	memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
+	status = "okay";
 };
