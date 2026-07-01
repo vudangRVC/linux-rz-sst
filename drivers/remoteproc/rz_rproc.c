@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/module.h>
+#include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/of_reserved_mem.h>
 #include <linux/platform_device.h>
@@ -12,47 +13,84 @@
 
 #include "remoteproc_internal.h"
 
-#define CM33_SRAM_START	0x00000000
+/* Common CM33/CA55 address map (identical on both SoCs) */
+#define CM33_SRAM_START		0x00000000
 #define CM33_SRAM_END		0x3FFFFFFF
 #define CM33_DDR_START		0x60000000
 #define CM33_DDR_END		0x7FFFFFFF
-
-#define CA55_SRAM_START	0x00000000
+#define CA55_SRAM_START		0x00000000
 #define CA55_DDR_START		0x40000000
 #define CA55_DDR_CM33_START	0x40010000
 #define CA55_DDR_CM33_END	0x43EFFFFF
-
 #define CM33_TO_CA55_MASK	0x0FFFFFFF
-#define CPG_CLKON_CM33_CLK0_ON_MASK	0x00000001
-
-#define CPG_SIPLL3_MON		0x13C	// PLL3 (SSCG) Monitor Register
-#define PLL3_RESET		BIT(0)	// SSCG PLL3 Operating mode monitoring
-#define CPG_CLKON_CM33		0x504	// Clock Control Register Cortex-M33
-#define CPG_CLKMON_CM33	0x684	// Clock Monitor Register Cortex-M33
-#define CPG_RST_CM33		0x804	// Reset Control Register Cortex-M33
-#define CPG_RSTMON_CM33	0x984	// Reset Monitor Register Cortex-M33
-
-#define SYS_CM33_CFG0		0x804	// CM33 Config Register0
-#define SYS_CM33_CFG1		0x808	// CM33 Config Register1
-#define SYS_CM33_CFG2		0x80C	// CM33 Config Register2
-#define SYS_CM33_CFG3		0x810	// CM33 Config Register3
-#define SYS_CM33_CTL		0x818	// CM33 Control Register
-#define SYS_LSI_MODE		0xA00	// LSI Mode Signal Register
-#define SYS_LP_CM33CTL1	0xD28	// Lowpower Sequence CM33 Control Register1
 
 #define RSC_TBL_SIZE		0x1000
 
+/* ------------------------------------------------------------------ */
+/* RZ/V2H specific registers and masks                                */
+/* ------------------------------------------------------------------ */
+#define RZV2H_CPG_CLKON_1_CLK2_ON_MASK	0x00040000
+#define RZV2H_CPG_CLKON_1		0x604
+#define RZV2H_CPG_LP_CM33_CTL1		0xC1C
+#define RZV2H_CPG_LP_CM33_CTL0		0xD2C
+#define RZV2H_CPG_CM33_CTL		0xC0C
+#define RZV2H_CPG_RST_1			0x904
+#define RZV2H_CPG_RSTMON_0		0xA00
+#define RZV2H_CPG_CLKMON_0		0x800
+#define RZV2H_SYS_MCPU_CFG2		0x80C
+#define RZV2H_SYS_MCPU_CFG3		0x810
+
+/* ------------------------------------------------------------------ */
+/* RZ/G2L (and RZ/V2L) specific registers and masks                   */
+/* ------------------------------------------------------------------ */
+#define RZG2L_CPG_CLKON_CM33_CLK0_ON_MASK	0x00000001
+#define RZG2L_CPG_SIPLL3_MON		0x13C
+#define RZG2L_PLL3_RESET		BIT(0)
+#define RZG2L_CPG_CLKON_CM33		0x504
+#define RZG2L_CPG_CLKMON_CM33		0x684
+#define RZG2L_CPG_RST_CM33		0x804
+#define RZG2L_CPG_RSTMON_CM33		0x984
+#define RZG2L_SYS_CM33_CFG0		0x804
+#define RZG2L_SYS_CM33_CFG1		0x808
+#define RZG2L_SYS_CM33_CFG2		0x80C
+#define RZG2L_SYS_CM33_CFG3		0x810
+
+struct rz_rproc_pdata;
+
+/* Per-variant descriptor */
+struct rz_rproc_data {
+	int (*start)(struct rproc *rproc);
+	int (*stop)(struct rproc *rproc);
+	int (*parse_fw)(struct rproc *rproc, const struct firmware *fw);
+
+	/* Number of reset controls; names looked up by rz_rproc_probe() */
+	const char * const *reset_names;
+	int num_resets;
+
+	/* CPG reset-monitor register + mask used to detect running core.
+	 * "detached_running" is the RSTMON value that means "not in reset".
+	 */
+	u32 rstmon_reg;
+	u32 rstmon_mask;
+
+	bool needs_mem_region_request; /* RZ/G2L requests mem regions */
+	bool detach_on_boot;           /* RZ/G2L uses RPROC_DETACHED */
+};
+
 struct rz_rproc_pdata {
-	struct reset_control *nporeset;
-	struct reset_control *nsysreset;
-	struct reset_control *miscresetn;
+	const struct rz_rproc_data *data;
+	struct reset_control *resets[3];
 	struct regmap *cpg_regmap;
 	struct regmap *sysc_regmap;
 	u32 bootaddr[2];
 };
 
+/* ================================================================== */
+/* Common helpers                                                     */
+/* ================================================================== */
+
 static int rz_rproc_mem_alloc(struct rproc *rproc,
-				 struct rproc_mem_entry *mem)
+			      struct rproc_mem_entry *mem)
 {
 	struct device *dev = rproc->dev.parent;
 	void __iomem *va;
@@ -65,14 +103,13 @@ static int rz_rproc_mem_alloc(struct rproc *rproc,
 		return -ENOMEM;
 	}
 
-	/* Update memory entry va */
 	mem->va = va;
 
 	return 0;
 }
 
 static int rz_rproc_mem_release(struct rproc *rproc,
-				   struct rproc_mem_entry *mem)
+				struct rproc_mem_entry *mem)
 {
 	struct device *dev = rproc->dev.parent;
 
@@ -102,8 +139,7 @@ static int rz_rproc_prepare(struct rproc *rproc)
 		/* No need to translate pa to da, RZ use same map */
 		da = res->start;
 
-		mem = rproc_mem_entry_init(dev, NULL,
-					   res->start,
+		mem = rproc_mem_entry_init(dev, NULL, res->start,
 					   resource_size(res), da,
 					   rz_rproc_mem_alloc,
 					   rz_rproc_mem_release,
@@ -129,10 +165,8 @@ static int rz_rproc_prepare(struct rproc *rproc)
 		/* No need to translate pa to da, RZ use same map */
 		da = rmem->base;
 
-		/*  No need to map vdev buffer */
 		if (strcmp(it.node->name, "vdev0buffer")) {
-			mem = rproc_mem_entry_init(dev, NULL,
-						   rmem->base,
+			mem = rproc_mem_entry_init(dev, NULL, rmem->base,
 						   rmem->size, da,
 						   rz_rproc_mem_alloc,
 						   rz_rproc_mem_release,
@@ -154,88 +188,8 @@ static int rz_rproc_prepare(struct rproc *rproc)
 	return 0;
 }
 
-static int rz_rproc_start(struct rproc *rproc)
-{
-	struct rz_rproc_pdata *pdata = rproc->priv;
-	uint32_t val;
-
-	/* Configure secure and non-secure SysTick based on SSL setting */
-	regmap_read(pdata->cpg_regmap, CPG_SIPLL3_MON, &val);
-	if ((val & PLL3_RESET) == 0x1) {
-		/* Normal mode */
-		regmap_write(pdata->sysc_regmap, SYS_CM33_CFG0, 0x01003CE5);
-		regmap_write(pdata->sysc_regmap, SYS_CM33_CFG1, 0x01003CE5);
-	} else {
-		/* Standby mode */
-		regmap_write(pdata->sysc_regmap, SYS_CM33_CFG0, 0x00003D08);
-		regmap_write(pdata->sysc_regmap, SYS_CM33_CFG1, 0x00003D08);
-	}
-
-	/* Set secure and non-secure vectore address */
-	regmap_write(pdata->sysc_regmap, SYS_CM33_CFG2, pdata->bootaddr[0]);
-	regmap_write(pdata->sysc_regmap, SYS_CM33_CFG3, pdata->bootaddr[1]);
-
-	/* Set register CPG_CLKON_CM33 */
-	regmap_write(pdata->cpg_regmap, CPG_CLKON_CM33, 0x00010001);
-
-	do
-	{
-		regmap_read(pdata->cpg_regmap, CPG_CLKMON_CM33, &val);
-	} while ((val & CPG_CLKON_CM33_CLK0_ON_MASK) == 0);
-
-	/* Set register CPG_RST_CM33 */
-	regmap_write(pdata->cpg_regmap, CPG_RST_CM33, 0x00040004);
-	regmap_write(pdata->cpg_regmap, CPG_RST_CM33, 0x00070007);
-
-	do
-	{
-		regmap_read(pdata->cpg_regmap, CPG_RSTMON_CM33, &val);
-	} while ((val & 0x00000007) != 0);
-
-	return 0;
-}
-
-static int rz_rproc_stop(struct rproc *rproc)
-{
-	struct device *dev = rproc->dev.parent;
-	struct rz_rproc_pdata *pdata = rproc->priv;
-	struct rproc_mem_entry *carveout;
-	int ret;
-
-	/* Clear registered carveouts */
-	list_for_each_entry(carveout, &rproc->carveouts, node) {
-		if (!carveout->va)
-			continue;
-
-		memset(carveout->va, 0, carveout->len);
-	}
-
-	ret = reset_control_assert(pdata->nporeset);
-	if (ret) {
-		dev_err(dev, "failed to assert nporeset\n");
-		return ret;
-	}
-
-	ret = reset_control_assert(pdata->nsysreset);
-	if (ret) {
-		dev_err(dev, "failed to assert nsysreset\n");
-		return ret;
-	}
-
-	ret = reset_control_assert(pdata->miscresetn);
-	if (ret) {
-		dev_err(dev, "failed to assert miscresetn\n");
-		return ret;
-	}
-
-	pm_runtime_put(dev);
-
-	return 0;
-}
-
 static int rz_rproc_attach(struct rproc *rproc)
 {
-	/* Do nothing */
 	return 0;
 }
 
@@ -249,33 +203,25 @@ static int cm33_to_ca55(u64 *da)
 	if ((CM33_SRAM_END >= *da) && (*da >= CM33_SRAM_START)) {
 		*da = CA55_SRAM_START + (*da & CM33_TO_CA55_MASK);
 		return 0;
-	}
-	else if ((CM33_DDR_END >= *da) && (*da >= CM33_DDR_START)) {
+	} else if ((CM33_DDR_END >= *da) && (*da >= CM33_DDR_START)) {
 		*da = CA55_DDR_START + (*da & CM33_TO_CA55_MASK);
 		return 0;
 	}
-	else
-		return -EINVAL;
+
+	return -EINVAL;
 }
 
-static void *rz_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is_iomem)
+static void *rz_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len,
+			       bool *is_iomem)
 {
 	struct device *dev = rproc->dev.parent;
 	struct rproc_mem_entry *carveout;
 	void *ptr = NULL;
 	int ret;
 
-	/* rproc_da_to_va() is called in many places. @da value can either be
-	 * the address of segments in .elf file which is in CM33 address space
-	 * or the address of .resource_table's trace buffer which is in CA55
-	 * address space. Trace buffer is expected to be in the dedicated memory
-	 * region for CM33 in DDR. Here, we first check if @da is address of
-	 * trace buffer or segments then have corresponding action.
-	 */
 	if ((CA55_DDR_CM33_END >= da) && (da >= CA55_DDR_CM33_START)) {
 		/* @da is address of trace buffer. Do nothing. */
 	} else {
-		/* @da is address of segment. Translate @da to CA55 space. */
 		ret = cm33_to_ca55(&da);
 		if (ret) {
 			dev_err(dev, "invalid address\n");
@@ -286,27 +232,180 @@ static void *rz_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len, bool *is
 	list_for_each_entry(carveout, &rproc->carveouts, node) {
 		int offset = da - carveout->da;
 
-		/* Verify that carveout is allocated */
 		if (!carveout->va)
 			continue;
-
-		/* try next carveout if da is too small */
 		if (offset < 0)
 			continue;
-
-		/* try next carveout if da is too large */
 		if (offset + len > carveout->len)
 			continue;
 
 		ptr = carveout->va + offset;
-
 		break;
 	}
 
 	return ptr;
 }
 
-static int rz_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
+/* ================================================================== */
+/* RZ/V2H start / stop                                                */
+/* ================================================================== */
+
+static int rzv2h_rproc_start(struct rproc *rproc)
+{
+	struct device *dev = rproc->dev.parent;
+	struct rz_rproc_pdata *pdata = rproc->priv;
+	u32 clkmon, rstmon;
+
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_LP_CM33_CTL0, 0x02000000);
+
+	regmap_read(pdata->cpg_regmap, RZV2H_CPG_CLKMON_0, &clkmon);
+	if (clkmon & RZV2H_CPG_CLKON_1_CLK2_ON_MASK)
+		dev_info(dev, "CM33 clock already ON, proceeding\n");
+
+	/* Ensure CM33 is in reset */
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_RST_1, 0x00380000);
+	do {
+		regmap_read(pdata->cpg_regmap, RZV2H_CPG_RSTMON_0, &rstmon);
+	} while ((rstmon & 0x000E0000) != 0x000E0000);
+
+	if (clkmon & RZV2H_CPG_CLKON_1_CLK2_ON_MASK) {
+		regmap_write(pdata->cpg_regmap, RZV2H_CPG_CLKON_1, 0x00040000);
+		do {
+			regmap_read(pdata->cpg_regmap, RZV2H_CPG_CLKMON_0, &clkmon);
+		} while (clkmon & RZV2H_CPG_CLKON_1_CLK2_ON_MASK);
+	}
+
+	regmap_write(pdata->sysc_regmap, RZV2H_SYS_MCPU_CFG2, pdata->bootaddr[0]);
+	regmap_write(pdata->sysc_regmap, RZV2H_SYS_MCPU_CFG3, pdata->bootaddr[1]);
+	dev_info(dev, "CM33 bootaddr secure=0x%08x non-secure=0x%08x\n",
+		 pdata->bootaddr[0], pdata->bootaddr[1]);
+
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CLKON_1, 0x00040004);
+	do {
+		regmap_read(pdata->cpg_regmap, RZV2H_CPG_CLKMON_0, &clkmon);
+	} while ((clkmon & RZV2H_CPG_CLKON_1_CLK2_ON_MASK) == 0);
+
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_LP_CM33_CTL1, 0x00003100);
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CM33_CTL, 0x00000001);
+
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_RST_1, 0x00380008);
+	do {
+		regmap_read(pdata->cpg_regmap, RZV2H_CPG_RSTMON_0, &rstmon);
+	} while ((rstmon & 0x000E0000) != 0x000C0000);
+
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_RST_1, 0x00380038);
+	do {
+		regmap_read(pdata->cpg_regmap, RZV2H_CPG_RSTMON_0, &rstmon);
+	} while (rstmon & 0x000E0000);
+
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CM33_CTL, 0x00000000);
+
+	return 0;
+}
+
+static int rzv2h_rproc_stop(struct rproc *rproc)
+{
+	struct rz_rproc_pdata *pdata = rproc->priv;
+	struct rproc_mem_entry *carveout;
+	u32 rstmon, clkmon;
+
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_RST_1, 0x00380000);
+	do {
+		regmap_read(pdata->cpg_regmap, RZV2H_CPG_RSTMON_0, &rstmon);
+	} while ((rstmon & 0x000E0000) != 0x000E0000);
+
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CM33_CTL, 0x00000001);
+
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CLKON_1, 0x00040000);
+	do {
+		regmap_read(pdata->cpg_regmap, RZV2H_CPG_CLKMON_0, &clkmon);
+	} while (clkmon & RZV2H_CPG_CLKON_1_CLK2_ON_MASK);
+
+	list_for_each_entry(carveout, &rproc->carveouts, node) {
+		if (!carveout->va)
+			continue;
+		memset(carveout->va, 0, carveout->len);
+	}
+
+	return 0;
+}
+
+static int rzv2h_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
+{
+	int ret;
+
+	ret = rproc_elf_load_rsc_table(rproc, fw);
+	if (ret && ret != -EINVAL && ret != -ENOENT)
+		dev_warn(&rproc->dev, "failed to load resource table: %d\n", ret);
+
+	return 0;
+}
+
+/* ================================================================== */
+/* RZ/G2L (RZ/V2L) start / stop                                       */
+/* ================================================================== */
+
+static int rzg2l_rproc_start(struct rproc *rproc)
+{
+	struct rz_rproc_pdata *pdata = rproc->priv;
+	u32 val;
+
+	regmap_read(pdata->cpg_regmap, RZG2L_CPG_SIPLL3_MON, &val);
+	if ((val & RZG2L_PLL3_RESET) == 0x1) {
+		/* Normal mode */
+		regmap_write(pdata->sysc_regmap, RZG2L_SYS_CM33_CFG0, 0x01003CE5);
+		regmap_write(pdata->sysc_regmap, RZG2L_SYS_CM33_CFG1, 0x01003CE5);
+	} else {
+		/* Standby mode */
+		regmap_write(pdata->sysc_regmap, RZG2L_SYS_CM33_CFG0, 0x00003D08);
+		regmap_write(pdata->sysc_regmap, RZG2L_SYS_CM33_CFG1, 0x00003D08);
+	}
+
+	regmap_write(pdata->sysc_regmap, RZG2L_SYS_CM33_CFG2, pdata->bootaddr[0]);
+	regmap_write(pdata->sysc_regmap, RZG2L_SYS_CM33_CFG3, pdata->bootaddr[1]);
+
+	regmap_write(pdata->cpg_regmap, RZG2L_CPG_CLKON_CM33, 0x00010001);
+	do {
+		regmap_read(pdata->cpg_regmap, RZG2L_CPG_CLKMON_CM33, &val);
+	} while ((val & RZG2L_CPG_CLKON_CM33_CLK0_ON_MASK) == 0);
+
+	regmap_write(pdata->cpg_regmap, RZG2L_CPG_RST_CM33, 0x00040004);
+	regmap_write(pdata->cpg_regmap, RZG2L_CPG_RST_CM33, 0x00070007);
+	do {
+		regmap_read(pdata->cpg_regmap, RZG2L_CPG_RSTMON_CM33, &val);
+	} while (val & 0x00000007);
+
+	return 0;
+}
+
+static int rzg2l_rproc_stop(struct rproc *rproc)
+{
+	struct device *dev = rproc->dev.parent;
+	struct rz_rproc_pdata *pdata = rproc->priv;
+	struct rproc_mem_entry *carveout;
+	int i, ret;
+
+	list_for_each_entry(carveout, &rproc->carveouts, node) {
+		if (!carveout->va)
+			continue;
+		memset(carveout->va, 0, carveout->len);
+	}
+
+	for (i = 0; i < pdata->data->num_resets; i++) {
+		ret = reset_control_assert(pdata->resets[i]);
+		if (ret) {
+			dev_err(dev, "failed to assert %s\n",
+				pdata->data->reset_names[i]);
+			return ret;
+		}
+	}
+
+	pm_runtime_put(dev);
+
+	return 0;
+}
+
+static int rzg2l_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
 {
 	int ret;
 
@@ -315,6 +414,31 @@ static int rz_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
 		dev_warn(&rproc->dev, "no resource table found for this firmware\n");
 
 	return 0;
+}
+
+/* ================================================================== */
+/* rproc ops (dispatch to variant callbacks)                          */
+/* ================================================================== */
+
+static int rz_rproc_start(struct rproc *rproc)
+{
+	struct rz_rproc_pdata *pdata = rproc->priv;
+
+	return pdata->data->start(rproc);
+}
+
+static int rz_rproc_stop(struct rproc *rproc)
+{
+	struct rz_rproc_pdata *pdata = rproc->priv;
+
+	return pdata->data->stop(rproc);
+}
+
+static int rz_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
+{
+	struct rz_rproc_pdata *pdata = rproc->priv;
+
+	return pdata->data->parse_fw(rproc, fw);
 }
 
 static const struct rproc_ops rz_rproc_ops = {
@@ -331,73 +455,140 @@ static const struct rproc_ops rz_rproc_ops = {
 	.get_boot_addr		= rproc_elf_get_boot_addr,
 };
 
+/* ================================================================== */
+/* Variant descriptors                                                */
+/* ================================================================== */
+
+static const char * const rzv2h_reset_names[] = {
+	"cm33reset0", "cm33reset1", "cm33reset2",
+};
+
+static const char * const rzg2l_reset_names[] = {
+	"nporeset", "nsysreset", "miscresetn",
+};
+
+static const struct rz_rproc_data rzv2h_rproc_data = {
+	.start			= rzv2h_rproc_start,
+	.stop			= rzv2h_rproc_stop,
+	.parse_fw		= rzv2h_rproc_parse_fw,
+	.reset_names		= rzv2h_reset_names,
+	.num_resets		= ARRAY_SIZE(rzv2h_reset_names),
+	.rstmon_reg		= RZV2H_CPG_RSTMON_0,
+	.rstmon_mask		= 0x000E0000,
+	.needs_mem_region_request = false,
+	.detach_on_boot		= false,
+};
+
+static const struct rz_rproc_data rzg2l_rproc_data = {
+	.start			= rzg2l_rproc_start,
+	.stop			= rzg2l_rproc_stop,
+	.parse_fw		= rzg2l_rproc_parse_fw,
+	.reset_names		= rzg2l_reset_names,
+	.num_resets		= ARRAY_SIZE(rzg2l_reset_names),
+	.rstmon_reg		= RZG2L_CPG_RSTMON_CM33,
+	.rstmon_mask		= 0xFFFFFFFF,
+	.needs_mem_region_request = true,
+	.detach_on_boot		= true,
+};
+
+/* ================================================================== */
+/* Probe / remove                                                     */
+/* ================================================================== */
+
+static void rzg2l_rproc_load_rsc_table(struct device *dev,
+				       struct rproc *rproc)
+{
+	struct device_node *np = dev->of_node;
+	struct resource_table *rsc_table;
+	void __iomem *rsc_va;
+	u32 rsc_pa;
+
+	if (of_property_read_u32_index(np, "renesas,rz-rsctbl", 0, &rsc_pa)) {
+		dev_warn(dev, "detached firmware has no resource table\n");
+		return;
+	}
+
+	rsc_va = devm_ioremap_wc(dev, rsc_pa, RSC_TBL_SIZE);
+	if (!rsc_va) {
+		dev_err(dev, "unable to map memory region: %pa+%zx\n",
+			&rsc_pa, (size_t)RSC_TBL_SIZE);
+		return;
+	}
+
+	rsc_table = (struct resource_table *)rsc_va;
+	if (rsc_table->ver != 1) {
+		devm_iounmap(dev, rsc_va);
+		dev_warn(dev, "detached firmware has no resource table\n");
+		return;
+	}
+
+	rproc->table_ptr = rsc_table;
+	rproc->table_sz = RSC_TBL_SIZE;
+}
+
 static int rz_rproc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = dev->of_node;
+	const struct rz_rproc_data *data;
 	struct rz_rproc_pdata *pdata;
 	struct rproc *rproc;
 	struct resource *res;
-	uint32_t val;
-	int ret;
-	int i;
+	u32 val, running;
+	int ret, i;
 
-	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
-	if (!pdata)
-		return -ENOMEM;
+	dev_info(dev, "rz_rproc_probe entered\n");	/* DEBUG */
+	data = of_device_get_match_data(dev);
+	if (!data) {
+		dev_err(dev, "no match data\n");	/* DEBUG */
+		return -ENODEV;
+	}
 
 	rproc = devm_rproc_alloc(dev, np->name, &rz_rproc_ops, NULL,
 				 sizeof(*pdata));
 	if (!rproc)
 		return -ENOMEM;
 
-	for (i = 0; i < pdev->num_resources; i++) {
-		res = platform_get_resource(pdev, IORESOURCE_MEM, i);
-		if (!devm_request_mem_region(dev, res->start, resource_size(res),
-					     dev_name(dev))) {
-			dev_err(dev, "unable to request memory region\n");
-			return -EBUSY;
+	pdata = rproc->priv;
+	pdata->data = data;
+
+	/* RZ/G2L requests memory regions explicitly */
+	if (data->needs_mem_region_request) {
+		for (i = 0; i < pdev->num_resources; i++) {
+			res = platform_get_resource(pdev, IORESOURCE_MEM, i);
+			if (!res)
+				continue;
+			if (!devm_request_mem_region(dev, res->start,
+						     resource_size(res),
+						     dev_name(dev))) {
+				dev_err(dev, "unable to request memory region\n");
+				return -EBUSY;
+			}
 		}
 	}
 
-	/* Get remgap of cpg and sysc */
 	pdata->cpg_regmap = syscon_regmap_lookup_by_phandle(np, "renesas,rz-cpg");
 	if (IS_ERR(pdata->cpg_regmap)) {
-		ret = PTR_ERR(pdata->cpg_regmap);
 		dev_err(dev, "failed to lookup cpg regmap\n");
-		return ret;
+		return PTR_ERR(pdata->cpg_regmap);
 	}
 
 	pdata->sysc_regmap = syscon_regmap_lookup_by_phandle(np, "renesas,rz-sysc");
 	if (IS_ERR(pdata->sysc_regmap)) {
-		ret = PTR_ERR(pdata->sysc_regmap);
 		dev_err(dev, "failed to lookup sysc regmap\n");
-		return ret;
+		return PTR_ERR(pdata->sysc_regmap);
 	}
 
-	/* Obtain reference to reset controllers */
-	pdata->nporeset = devm_reset_control_get_exclusive(dev, "nporeset");
-	if (IS_ERR(pdata->nporeset)) {
-		ret = PTR_ERR(pdata->nporeset);
-		dev_err(dev, "failed to acquire nporeset\n");
-		return ret;
+	for (i = 0; i < data->num_resets; i++) {
+		pdata->resets[i] = devm_reset_control_get_exclusive(dev,
+						data->reset_names[i]);
+		if (IS_ERR(pdata->resets[i])) {
+			dev_err(dev, "failed to acquire %s\n",
+				data->reset_names[i]);
+			return PTR_ERR(pdata->resets[i]);
+		}
 	}
 
-	pdata->nsysreset = devm_reset_control_get_exclusive(dev, "nsysreset");
-	if (IS_ERR(pdata->nsysreset)) {
-		ret = PTR_ERR(pdata->nsysreset);
-		dev_err(dev, "failed to acquire nsysreset\n");
-		return ret;
-	}
-
-	pdata->miscresetn = devm_reset_control_get_exclusive(dev, "miscresetn");
-	if (IS_ERR(pdata->miscresetn)) {
-		ret = PTR_ERR(pdata->miscresetn);
-		dev_err(dev, "failed to acquire miscresetn\n");
-		return ret;
-	}
-
-	/* Get secure and non-secure vector address */
 	for (i = 0; i < 2; i++) {
 		if (of_property_read_u32_index(np, "renesas,rz-bootaddrs", i,
 					       &pdata->bootaddr[i])) {
@@ -406,55 +597,30 @@ static int rz_rproc_probe(struct platform_device *pdev)
 		}
 	}
 
-	rproc->priv = pdata;
-	rproc->auto_boot = of_get_property(np, "renesas,rz-autoboot", NULL) ?
-			   true : false;
+	rproc->auto_boot = of_property_read_bool(np, "renesas,rz-autoboot");
 
 	pm_runtime_enable(dev);
 
-	/* Check remote processor state */
-	regmap_read(pdata->cpg_regmap, CPG_RSTMON_CM33, &val);
-	if (!val) {
-		/* Remote processor is already powered on */
-		rproc->state = RPROC_DETACHED;
+	/* Detect whether the remote processor is already running */
+	regmap_read(pdata->cpg_regmap, data->rstmon_reg, &val);
+	running = !(val & data->rstmon_mask);
+
+	if (running) {
+		dev_info(dev, "CM33 released from reset by bootloader\n");
+
+		if (data->detach_on_boot)
+			rproc->state = RPROC_DETACHED;
 
 		pm_runtime_get_sync(dev);
 
-		struct resource_table *rsc_table = NULL;
-		uint32_t rsc_pa ;
-		void __iomem *rsc_va;
+		if (data->detach_on_boot)
+			rzg2l_rproc_load_rsc_table(dev, rproc);
 
-		/* Get loaded rsc table */
-		if (of_property_read_u32_index(np, "renesas,rz-rsctbl", 0, &rsc_pa)) {
-			dev_warn(dev, "detached processor's firmware has no resource table\n");
-			goto rproc_prepare;
-		}
-
-		rsc_va = devm_ioremap_wc(dev, rsc_pa, RSC_TBL_SIZE);
-		if (!rsc_va) {
-			dev_err(dev, "unable to map memory region: %pa+%zx\n",
-				&rsc_pa, (size_t)RSC_TBL_SIZE);
-			goto rproc_prepare;
-		}
-
-		rsc_table = (struct resource_table *)rsc_va;
-		if (rsc_table->ver !=1) {
-			devm_iounmap(dev, rsc_va);
-			dev_warn(dev, "detached processor's firmware has no resource table\n");
-		} else {
-			rproc->table_ptr = rsc_table;
-			/* Assuming the resource table fits in 1kB is fair */
-			rproc->table_sz = RSC_TBL_SIZE;
-		}
-
-rproc_prepare:
-		/* Parse memory regions */
 		rz_rproc_prepare(rproc);
 	}
 
 	platform_set_drvdata(pdev, rproc);
 
-	/* Register remote processor */
 	ret = rproc_add(rproc);
 	if (ret) {
 		dev_err(dev, "failed to register rproc\n");
@@ -466,8 +632,6 @@ rproc_prepare:
 	return 0;
 
 error:
-	rproc_free(rproc);
-
 	pm_runtime_disable(dev);
 
 	return ret;
@@ -478,14 +642,12 @@ static void rz_rproc_remove(struct platform_device *pdev)
 	struct rproc *rproc = platform_get_drvdata(pdev);
 
 	rproc_del(rproc);
-
-	rproc_free(rproc);
-
 	pm_runtime_disable(&pdev->dev);
 }
 
 static const struct of_device_id rz_rproc_of_match[] = {
-	{ .compatible = "renesas,rz-cm33", },
+	{ .compatible = "renesas,rzv2h-cm33",  .data = &rzv2h_rproc_data },
+	{ .compatible = "renesas,rzg2l-cm33",  .data = &rzg2l_rproc_data },
 	{ /* end of list */ },
 };
 MODULE_DEVICE_TABLE(of, rz_rproc_of_match);

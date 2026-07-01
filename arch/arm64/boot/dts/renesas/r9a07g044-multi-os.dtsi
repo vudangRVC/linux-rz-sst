@@ -51,4 +51,4 @@
 		interrupts = <GIC_SPI 75 IRQ_TYPE_LEVEL_HIGH>;
 		status = "okay";
 	};
-}
+};

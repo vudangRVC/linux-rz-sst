@@ -1355,7 +1355,7 @@
 		};
 
 		cm33_rproc: cm33 {
-			compatible = "renesas,rz-cm33";
+			compatible = "renesas,rzg2l-cm33";
 			reg = <0x0 0x00010000 0x0 0x0000800>,
 			      <0x0 0x0001FF80 0x0 0x0000080>,
 			      <0x0 0x40010000 0x0 0x3EF0000>;

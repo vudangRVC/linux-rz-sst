@@ -879,8 +879,3 @@
 		};
 	};
 };
-
-//&cm33 {
-//	memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
-//	status = "okay";
-//};
