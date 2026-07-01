@@ -545,7 +545,7 @@
 };
 
 &ostm2 {
-	status = "okay";
+	status = "disabled";
 };
 
 &i2c0 {
@@ -880,8 +880,7 @@
 	};
 };
 
-
-&cm33 {
-	memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
-	status = "okay";
-};
+//&cm33 {
+//	memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
+//	status = "okay";
+//};

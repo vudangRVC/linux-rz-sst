@@ -1,65 +1,11 @@
 // SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 /*
  * Device Tree Source for the RZ/{G2L,V2L} SMARC board and support OpenAMP related stuff
- *
+ * 
  * Copyright (C) 2024 Renesas Electronics Corp.
  */
 
 / {
-	reserved-memory {
-		#address-cells = <0x2>;
-		#size-cells = <0x2>;
-		ranges;
-
-		/* non-secure + secure vectors → PA 0x00010000-0x0001FFC0 */
-		cm33_vectors: cm33-vectors@10000 {
-			reg = <0x0 0x00010000 0x0 0x10000>;
-			no-map;
-		};
-
-		/* non-secure code/data/bss → PA 0x40010000 */
-		cm33_image: cm33-image@40010000 {
-			reg = <0x0 0x40010000 0x0 0x20000>;
-			no-map;
-		};
-
-		/* secure code + stack → PA 0x42EFF440/0x42EFF800 */
-		cm33_secure: cm33-secure@42eff000 {
-			reg = <0x0 0x42EFF000 0x0 0x1000>;
-			no-map;
-		};
-
-		/* resource table + mhu shmem → PA 0x42F00000/0x42F01000 */
-		cm33_sram: cm33-sram@42f00000 {
-			reg = <0x0 0x42F00000 0x0 0x2000>;
-			no-map;
-		};
-
-		/* vring 8MB → PA 0x43000000 */
-		cm33_vring: cm33-vring@43000000 {
-			reg = <0x0 0x43000000 0x0 0x800000>;
-			no-map;
-		};
-
-		vdev0vring0: vdev0vring0@43000000 {
-			compatible = "shared-dma-pool";
-			reg = <0x0 0x43000000 0x0 0x50000>;
-			no-map;
-		};
-
-		vdev0vring1: vdev0vring1@43050000 {
-			compatible = "shared-dma-pool";
-			reg = <0x0 0x43050000 0x0 0x50000>;
-			no-map;
-		};
-
-		vdev0buffer: vdev0buffer@43200000 {
-			compatible = "shared-dma-pool";
-			reg = <0x0 0x43200000 0x0 0x300000>;
-			no-map;
-		};
-	};
-
 	vring-ctl0@43000000 {
 		compatible = "vring_uio";
 		reg = <0x0 0x43000000 0x0 0x100000>;
@@ -99,10 +45,10 @@
 
 &soc {
 	mbox_uio: mbox-uio@10400000 {
-		compatible = "mbox_uio";
+		compatible = "generic-uio";
 		reg = <0x0 0x10400000 0x0 0x1000>;
 		interrupt-parent = <&gic>;
 		interrupts = <GIC_SPI 75 IRQ_TYPE_LEVEL_HIGH>;
 		status = "okay";
 	};
-};
+}
