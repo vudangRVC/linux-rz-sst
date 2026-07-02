@@ -25,26 +25,46 @@
 #define RSC_TBL_SIZE			0x1000
 
 /* RZ/V2H CM33 DDR (view) range */
-#define RZV2H_CM33_DDR_START	0x80000000
+#define RZV2H_CM33_DDR_START		0x80000000
 #define RZV2H_CM33_DDR_END		0x9FFFFFFF
 
 /* RZ/G2L CM33 DDR (view) range */
-#define RZG2L_CM33_DDR_START	0x60000000
+#define RZG2L_CM33_DDR_START		0x60000000
 #define RZG2L_CM33_DDR_END		0x7FFFFFFF
 
 /* ------------------------------------------------------------------ */
 /* RZ/V2H specific registers and masks                                */
 /* ------------------------------------------------------------------ */
 #define RZV2H_CPG_CLKON_1_CLK2_ON_MASK	0x00040000
+#define RZV2H_CPG_BUS_10_MSTOP		0xD24
 #define RZV2H_CPG_CLKON_1		0x604
+#define RZV2H_CPG_CLKON_0		0x600
 #define RZV2H_CPG_LP_CM33_CTL1		0xC1C
 #define RZV2H_CPG_LP_CM33_CTL0		0xD2C
 #define RZV2H_CPG_CM33_CTL		0xC0C
 #define RZV2H_CPG_RST_1			0x904
+#define RZV2H_CPG_RST_2			0x908
 #define RZV2H_CPG_RSTMON_0		0xA00
+#define RZV2H_CPG_RSTMON_1		0xA04
 #define RZV2H_CPG_CLKMON_0		0x800
+#define RZV2H_CPG_CLKMON_1		0x804
 #define RZV2H_SYS_MCPU_CFG2		0x80C
 #define RZV2H_SYS_MCPU_CFG3		0x810
+#define RZV2H_CPG_LP_CR8_CTL3		0xC44
+#define RZV2H_CPG_CR8_CONFIG1		0xC14
+#define RZV2H_CPG_LP_CR8_CTL4		0xC48
+
+/* RZ/V2H CR8 TCM mapping */
+#define RZV2H_CR8_CORE0_ITCM_AXI_START	0x12040000
+#define RZV2H_CR8_CORE1_ITCM_AXI_START	0x12080000
+#define RZV2H_CR8_CORE_TCM_MAP_SIZE	0x00040000
+#define RZV2H_RESET_CTRL_READY		BIT(4)
+#define RZV2H_RESET_RELEASEREQ		BIT(3)
+
+/* RZ/V2H core IDs (from "renesas,rz-core") */
+#define RZV2H_CM33_CORE_NUMBER		0x0
+#define RZV2H_CR8_CORE0_NUMBER		0x1
+#define RZV2H_CR8_CORE1_NUMBER		0x2
 
 /* ------------------------------------------------------------------ */
 /* RZ/G2L (and RZ/V2L) specific registers and masks                   */
@@ -75,18 +95,16 @@ struct rz_rproc_data {
 	int (*stop)(struct rproc *rproc);
 	int (*parse_fw)(struct rproc *rproc, const struct firmware *fw);
 
-	/* Number of reset controls; names looked up by rz_rproc_probe() */
+	/* Reset controls (RZ/G2L only) */
 	const char * const *reset_names;
 	int num_resets;
 
-	/* CPG reset-monitor register + mask used to detect running core.
-	 * "detached_running" is the RSTMON value that means "not in reset".
-	 */
+	/* CPG reset-monitor register + mask for CM33 detach detection */
 	u32 rstmon_reg;
 	u32 rstmon_mask;
 
 	bool needs_mem_region_request; /* RZ/G2L requests mem regions */
-	bool detach_on_boot;           /* RZ/G2L uses RPROC_DETACHED */
+	bool detach_on_boot;           /* set RPROC_DETACHED if running */
 };
 
 struct rz_rproc_pdata {
@@ -95,7 +113,11 @@ struct rz_rproc_pdata {
 	struct regmap *cpg_regmap;
 	struct regmap *sysc_regmap;
 	u32 bootaddr[2];
+	u32 core; /* RZ/V2H core id; 0 (CM33) for RZ/G2L */
 };
+
+/* CR8 cluster initialization state (RZ/V2H only) */
+static bool cr8_cluster_initialized;
 
 /* ================================================================== */
 /* Common helpers                                                     */
@@ -131,7 +153,7 @@ static int rz_rproc_mem_release(struct rproc *rproc,
 	return 0;
 }
 
-static int rz_rproc_prepare(struct rproc *rproc)
+static int rz_rproc_add_carveouts(struct rproc *rproc)
 {
 	struct device *dev = rproc->dev.parent;
 	struct platform_device *pdev = to_platform_device(dev);
@@ -200,6 +222,31 @@ static int rz_rproc_prepare(struct rproc *rproc)
 	return 0;
 }
 
+static int rz_rproc_prepare(struct rproc *rproc)
+{
+	struct device *dev = rproc->dev.parent;
+	struct rz_rproc_pdata *pdata = rproc->priv;
+	int ret;
+
+	ret = rz_rproc_add_carveouts(rproc);
+	if (ret)
+		return ret;
+
+	/* If the remote core is already running (DETACHED), skip startup */
+	if (rproc->state == RPROC_DETACHED) {
+		dev_info(dev, "remote core already running, skip startup\n");
+		return 0;
+	}
+
+	/* RZ/V2H CR8 cluster initialization must happen at prepare time */
+	if (pdata->data->variant == RZ_VARIANT_RZV2H &&
+	    (pdata->core == RZV2H_CR8_CORE0_NUMBER ||
+	     pdata->core == RZV2H_CR8_CORE1_NUMBER))
+		return pdata->data->start == NULL ? 0 : 0; /* see rzv2h_cr8_startup below */
+
+	return 0;
+}
+
 static int rz_rproc_attach(struct rproc *rproc)
 {
 	return 0;
@@ -209,6 +256,10 @@ static void rz_rproc_kick(struct rproc *rproc, int vqid)
 {
 	/* Not supported Linux RPMsg yet */
 }
+
+/* ================================================================== */
+/* Address translation                                               */
+/* ================================================================== */
 
 static int cm33_to_ca55(struct rz_rproc_pdata *pdata, u64 *da)
 {
@@ -246,13 +297,24 @@ static void *rz_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len,
 	void *ptr = NULL;
 	int ret;
 
-	if ((CA55_DDR_CM33_END >= da) && (da >= CA55_DDR_CM33_START)) {
-		/* @da is address of trace buffer. Do nothing. */
+	if (pdata->data->variant == RZ_VARIANT_RZV2H &&
+	    pdata->core == RZV2H_CR8_CORE0_NUMBER &&
+	    da < RZV2H_CR8_CORE_TCM_MAP_SIZE) {
+		da += RZV2H_CR8_CORE0_ITCM_AXI_START;
+	} else if (pdata->data->variant == RZ_VARIANT_RZV2H &&
+		   pdata->core == RZV2H_CR8_CORE1_NUMBER &&
+		   da < RZV2H_CR8_CORE_TCM_MAP_SIZE) {
+		da += RZV2H_CR8_CORE1_ITCM_AXI_START;
 	} else {
-		ret = cm33_to_ca55(pdata, &da);
-		if (ret) {
-			dev_err(dev, "invalid address 0x%llx\n", da);
-			return ptr;
+		/* CM33 core (RZ/V2H or RZ/G2L) */
+		if ((CA55_DDR_CM33_END >= da) && (da >= CA55_DDR_CM33_START)) {
+			/* @da is address of trace buffer. Do nothing. */
+		} else {
+			ret = cm33_to_ca55(pdata, &da);
+			if (ret) {
+				dev_err(dev, "invalid address 0x%llx\n", da);
+				return ptr;
+			}
 		}
 	}
 
@@ -274,32 +336,36 @@ static void *rz_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len,
 }
 
 /* ================================================================== */
-/* RZ/V2H start / stop                                                */
+/* RZ/V2H CM33 startup / shutdown                                     */
 /* ================================================================== */
 
-static int rzv2h_rproc_start(struct rproc *rproc)
+static int rzv2h_cm33_startup(struct rproc *rproc)
 {
 	struct device *dev = rproc->dev.parent;
 	struct rz_rproc_pdata *pdata = rproc->priv;
 	u32 clkmon, rstmon;
 
+	/* Initialize SRAM/DDR configuration for CM33 */
 	regmap_write(pdata->cpg_regmap, RZV2H_CPG_LP_CM33_CTL0, 0x02000000);
 
+	/* Check CM33 clock status */
 	regmap_read(pdata->cpg_regmap, RZV2H_CPG_CLKMON_0, &clkmon);
 	if (clkmon & RZV2H_CPG_CLKON_1_CLK2_ON_MASK)
-		dev_info(dev, "CM33 clock already ON, proceeding\n");
-
+		dev_info(dev, "CM33 clock already ON, proceeding with initialization\n");
+		/* Continue - CM33 may have been started by bootloader */
 	/* Ensure CM33 is in reset */
 	regmap_write(pdata->cpg_regmap, RZV2H_CPG_RST_1, 0x00380000);
 	do {
 		regmap_read(pdata->cpg_regmap, RZV2H_CPG_RSTMON_0, &rstmon);
 	} while ((rstmon & 0x000E0000) != 0x000E0000);
 
+	/* If clock was already on, disable it first to ensure clean reset */
 	if (clkmon & RZV2H_CPG_CLKON_1_CLK2_ON_MASK) {
 		regmap_write(pdata->cpg_regmap, RZV2H_CPG_CLKON_1, 0x00040000);
 		do {
 			regmap_read(pdata->cpg_regmap, RZV2H_CPG_CLKMON_0, &clkmon);
 		} while (clkmon & RZV2H_CPG_CLKON_1_CLK2_ON_MASK);
+		dev_info(dev, "CM33 clock disabled for clean initialization\n");
 	}
 
 	regmap_write(pdata->sysc_regmap, RZV2H_SYS_MCPU_CFG2, pdata->bootaddr[0]);
@@ -311,10 +377,8 @@ static int rzv2h_rproc_start(struct rproc *rproc)
 	do {
 		regmap_read(pdata->cpg_regmap, RZV2H_CPG_CLKMON_0, &clkmon);
 	} while ((clkmon & RZV2H_CPG_CLKON_1_CLK2_ON_MASK) == 0);
-
 	regmap_write(pdata->cpg_regmap, RZV2H_CPG_LP_CM33_CTL1, 0x00003100);
 	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CM33_CTL, 0x00000001);
-
 	regmap_write(pdata->cpg_regmap, RZV2H_CPG_RST_1, 0x00380008);
 	do {
 		regmap_read(pdata->cpg_regmap, RZV2H_CPG_RSTMON_0, &rstmon);
@@ -326,28 +390,31 @@ static int rzv2h_rproc_start(struct rproc *rproc)
 	} while (rstmon & 0x000E0000);
 
 	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CM33_CTL, 0x00000000);
-
 	return 0;
 }
 
-static int rzv2h_rproc_stop(struct rproc *rproc)
+static int rzv2h_stop_cm33(struct rproc *rproc)
 {
 	struct rz_rproc_pdata *pdata = rproc->priv;
 	struct rproc_mem_entry *carveout;
 	u32 rstmon, clkmon;
 
+	/* Put CM33 back into reset before gating its clock */
 	regmap_write(pdata->cpg_regmap, RZV2H_CPG_RST_1, 0x00380000);
 	do {
 		regmap_read(pdata->cpg_regmap, RZV2H_CPG_RSTMON_0, &rstmon);
 	} while ((rstmon & 0x000E0000) != 0x000E0000);
 
+	/* Stop instruction fetch before removing the clock */
 	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CM33_CTL, 0x00000001);
 
+	/* Gate CM33 clock */
 	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CLKON_1, 0x00040000);
 	do {
 		regmap_read(pdata->cpg_regmap, RZV2H_CPG_CLKMON_0, &clkmon);
 	} while (clkmon & RZV2H_CPG_CLKON_1_CLK2_ON_MASK);
 
+	/* Clear registered carveouts after the core is quiesced */
 	list_for_each_entry(carveout, &rproc->carveouts, node) {
 		if (!carveout->va)
 			continue;
@@ -355,6 +422,160 @@ static int rzv2h_rproc_stop(struct rproc *rproc)
 	}
 
 	return 0;
+}
+
+/* ================================================================== */
+/* RZ/V2H CR8 startup / shutdown                                      */
+/* ================================================================== */
+
+static int rzv2h_cr8_startup(struct rproc *rproc)
+{
+	struct rz_rproc_pdata *pdata = rproc->priv;
+	u32 val;
+
+	if (cr8_cluster_initialized)
+		return 0;
+
+	/* Assert MSTOP for CR8 bus */
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_BUS_10_MSTOP, 0x04000000);
+
+	/* Set CR8 Clock to ON */
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CLKON_0, 0xE000E000);
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CLKON_1, 0x00030003);
+	do {
+		regmap_read(pdata->cpg_regmap, RZV2H_CPG_CLKMON_0, &val);
+	} while ((val & 0x0003E000) == 0);
+
+	/* Reset all CR8 resets */
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_RST_2, 0x1FFF0000);
+	do {
+		regmap_read(pdata->cpg_regmap, RZV2H_CPG_RSTMON_0, &val);
+	} while ((val & 0xFFF00000) != 0xFFF00000);
+	do {
+		regmap_read(pdata->cpg_regmap, RZV2H_CPG_RSTMON_1, &val);
+	} while ((val & 0x1) != 0x1);
+
+	/* Configure debug mode for CR8 */
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_LP_CR8_CTL3, 0x003F0000);
+
+	/* Set nCPUHALT to 00b (halt CR8 CPU) */
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CR8_CONFIG1, 0x00000000);
+
+	/* Release cold reset for CR8 */
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_RST_2, 0x10001000);
+
+	do {
+		regmap_read(pdata->cpg_regmap, RZV2H_CPG_LP_CR8_CTL4, &val);
+	} while (!(val & RZV2H_RESET_CTRL_READY));
+
+	/* Trigger reset release sequence */
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_LP_CR8_CTL4, 0x00000020);
+
+	do {
+		regmap_read(pdata->cpg_regmap, RZV2H_CPG_LP_CR8_CTL4, &val);
+	} while (!(val & RZV2H_RESET_RELEASEREQ));
+
+	/* Release all CR8 resets */
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_RST_2, 0x1FFF1FFF);
+
+	/* Clear the RESET_TRIG */
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_LP_CR8_CTL4, 0x00000000);
+
+	cr8_cluster_initialized = true;
+	return 0;
+}
+
+static int rzv2h_cr8_startup_and_config(struct rproc *rproc)
+{
+	struct rz_rproc_pdata *pdata = rproc->priv;
+	struct device *dev = rproc->dev.parent;
+	u32 val;
+	int ret;
+
+	ret = rzv2h_cr8_startup(rproc);
+	if (ret) {
+		dev_err(dev, "CR8 startup failed: %d\n", ret);
+	return ret;
+}
+
+	/* Set nCPUHALT to run CR8 CPU */
+	regmap_read(pdata->cpg_regmap, RZV2H_CPG_CR8_CONFIG1, &val);
+	if (pdata->core == RZV2H_CR8_CORE0_NUMBER)
+		val |= BIT(0);
+	else if (pdata->core == RZV2H_CR8_CORE1_NUMBER)
+		val |= BIT(1);
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CR8_CONFIG1, val);
+
+	return 0;
+}
+
+static int rzv2h_stop_cr8(struct rproc *rproc)
+{
+	struct rz_rproc_pdata *pdata = rproc->priv;
+	struct rproc_mem_entry *carveout;
+
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_RST_2, 0x1FFF0000);
+
+	list_for_each_entry(carveout, &rproc->carveouts, node) {
+		if (!carveout->va)
+			continue;
+		if (strstr(carveout->name, "tcm"))
+			continue;
+		memset(carveout->va, 0, carveout->len);
+	}
+
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CLKON_1, 0x00030000);
+	regmap_write(pdata->cpg_regmap, RZV2H_CPG_CLKON_0, 0xE0000000);
+
+	cr8_cluster_initialized = false;
+
+	return 0;
+}
+
+/* ================================================================== */
+/* RZ/V2H start / stop dispatch (by core)                             */
+/* ================================================================== */
+
+static int rzv2h_rproc_start(struct rproc *rproc)
+{
+	struct rz_rproc_pdata *pdata = rproc->priv;
+	struct device *dev = rproc->dev.parent;
+	int ret;
+
+	switch (pdata->core) {
+	case RZV2H_CM33_CORE_NUMBER:
+		ret = rzv2h_cm33_startup(rproc);
+		if (ret)
+			dev_err(dev, "CM33 startup failed: %d\n", ret);
+		return ret;
+
+	case RZV2H_CR8_CORE0_NUMBER:
+	case RZV2H_CR8_CORE1_NUMBER:
+		return rzv2h_cr8_startup_and_config(rproc);
+
+	default:
+		dev_err(dev, "Unsupported core id: %d\n", pdata->core);
+		return -EOPNOTSUPP;
+	}
+}
+
+static int rzv2h_rproc_stop(struct rproc *rproc)
+{
+	struct rz_rproc_pdata *pdata = rproc->priv;
+	struct device *dev = rproc->dev.parent;
+
+	switch (pdata->core) {
+	case RZV2H_CM33_CORE_NUMBER:
+		return rzv2h_stop_cm33(rproc);
+
+	case RZV2H_CR8_CORE0_NUMBER:
+	case RZV2H_CR8_CORE1_NUMBER:
+		return rzv2h_stop_cr8(rproc);
+
+	default:
+		dev_err(dev, "Unsupported core id: %d\n", pdata->core);
+		return -EOPNOTSUPP;
+	}
 }
 
 static int rzv2h_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
@@ -467,7 +688,6 @@ static int rz_rproc_parse_fw(struct rproc *rproc, const struct firmware *fw)
 
 	return pdata->data->parse_fw(rproc, fw);
 }
-
 static const struct rproc_ops rz_rproc_ops = {
 	.prepare		= rz_rproc_prepare,
 	.start			= rz_rproc_start,
@@ -486,7 +706,7 @@ static const struct rproc_ops rz_rproc_ops = {
 /* Variant descriptors                                                */
 /* ================================================================== */
 
-static const char * const rzv2h_reset_names[] = {
+static const char * const rzv2h_cm33_reset_names[] = {
 	"cm33reset0", "cm33reset1", "cm33reset2",
 };
 
@@ -499,8 +719,22 @@ static const struct rz_rproc_data rzv2h_rproc_data = {
 	.start			= rzv2h_rproc_start,
 	.stop			= rzv2h_rproc_stop,
 	.parse_fw		= rzv2h_rproc_parse_fw,
-	.reset_names		= rzv2h_reset_names,
-	.num_resets		= ARRAY_SIZE(rzv2h_reset_names),
+	.reset_names		= rzv2h_cm33_reset_names,
+	.num_resets		= ARRAY_SIZE(rzv2h_cm33_reset_names),
+	.rstmon_reg		= RZV2H_CPG_RSTMON_0,
+	.rstmon_mask		= 0x000E0000,
+	.needs_mem_region_request = false,
+	.detach_on_boot		= false,
+};
+
+/* CR8 has no reset controls in DT — num_resets = 0 */
+static const struct rz_rproc_data rzv2h_cr8_rproc_data = {
+	.variant		= RZ_VARIANT_RZV2H,
+	.start			= rzv2h_rproc_start,
+	.stop			= rzv2h_rproc_stop,
+	.parse_fw		= rzv2h_rproc_parse_fw,
+	.reset_names		= NULL,
+	.num_resets		= 0,
 	.rstmon_reg		= RZV2H_CPG_RSTMON_0,
 	.rstmon_mask		= 0x000E0000,
 	.needs_mem_region_request = false,
@@ -521,11 +755,10 @@ static const struct rz_rproc_data rzg2l_rproc_data = {
 };
 
 /* ================================================================== */
-/* Probe / remove                                                     */
+/* Detach / rsc-table helpers                                         */
 /* ================================================================== */
 
-static void rzg2l_rproc_load_rsc_table(struct device *dev,
-				       struct rproc *rproc)
+static void rz_rproc_attach_rsc_table(struct device *dev, struct rproc *rproc)
 {
 	struct device_node *np = dev->of_node;
 	struct resource_table *rsc_table;
@@ -555,6 +788,53 @@ static void rzg2l_rproc_load_rsc_table(struct device *dev,
 	rproc->table_sz = RSC_TBL_SIZE;
 }
 
+/* Returns true if the remote core is already running */
+static int rz_rproc_check_running(struct platform_device *pdev,
+				  struct rz_rproc_pdata *pdata,
+				  bool *running)
+{
+	struct device *dev = &pdev->dev;
+	const struct rz_rproc_data *data = pdata->data;
+	void __iomem *ddr_cr8_base;
+	struct resource *res;
+	u32 val;
+
+	*running = false;
+
+	/* RZ/V2H CR8: check the CR8 DDR marker */
+	if (data->variant == RZ_VARIANT_RZV2H &&
+	    (pdata->core == RZV2H_CR8_CORE0_NUMBER ||
+	     pdata->core == RZV2H_CR8_CORE1_NUMBER)) {
+		res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+						   "cr8_ddr");
+		if (!res) {
+			dev_err(dev, "cannot get cr8_ddr\n");
+			return -EINVAL;
+		}
+
+		ddr_cr8_base = devm_ioremap_resource(dev, res);
+		if (IS_ERR(ddr_cr8_base))
+			return PTR_ERR(ddr_cr8_base);
+
+		val = ioread32(ddr_cr8_base);
+		if (val != 0) {
+			*running = true;
+			cr8_cluster_initialized = true;
+		}
+		return 0;
+	}
+
+	/* CM33 (RZ/V2H or RZ/G2L): check RSTMON */
+	regmap_read(pdata->cpg_regmap, data->rstmon_reg, &val);
+	*running = !(val & data->rstmon_mask);
+
+	return 0;
+}
+
+/* ================================================================== */
+/* Probe / remove                                                     */
+/* ================================================================== */
+
 static int rz_rproc_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -563,13 +843,12 @@ static int rz_rproc_probe(struct platform_device *pdev)
 	struct rz_rproc_pdata *pdata;
 	struct rproc *rproc;
 	struct resource *res;
-	u32 val, running;
+	bool running = false;
 	int ret, i;
 
-	dev_info(dev, "rz_rproc_probe entered\n");	/* DEBUG */
 	data = of_device_get_match_data(dev);
 	if (!data) {
-		dev_err(dev, "no match data\n");	/* DEBUG */
+		dev_err(dev, "no match data\n");
 		return -ENODEV;
 	}
 
@@ -580,6 +859,11 @@ static int rz_rproc_probe(struct platform_device *pdev)
 
 	pdata = rproc->priv;
 	pdata->data = data;
+
+	/* RZ/V2H: read core id (defaults to CM33 core 0 if absent) */
+	if (data->variant == RZ_VARIANT_RZV2H)
+		of_property_read_u32_index(np, "renesas,rz-core", 0,
+					   &pdata->core);
 
 	/* RZ/G2L requests memory regions explicitly */
 	if (data->needs_mem_region_request) {
@@ -608,6 +892,7 @@ static int rz_rproc_probe(struct platform_device *pdev)
 		return PTR_ERR(pdata->sysc_regmap);
 	}
 
+	/* Acquire reset controls (RZ/G2L only) */
 	for (i = 0; i < data->num_resets; i++) {
 		pdata->resets[i] = devm_reset_control_get_exclusive(dev,
 						data->reset_names[i]);
@@ -618,11 +903,14 @@ static int rz_rproc_probe(struct platform_device *pdev)
 		}
 	}
 
-	for (i = 0; i < 2; i++) {
-		if (of_property_read_u32_index(np, "renesas,rz-bootaddrs", i,
-					       &pdata->bootaddr[i])) {
-			dev_err(dev, "invalid boot address\n");
-			return -EINVAL;
+	/* CM33 core needs boot vector addresses */
+	if (pdata->core == RZV2H_CM33_CORE_NUMBER) {
+		for (i = 0; i < 2; i++) {
+			if (of_property_read_u32_index(np, "renesas,rz-bootaddrs",
+						       i, &pdata->bootaddr[i])) {
+				dev_err(dev, "invalid boot address\n");
+				return -EINVAL;
+			}
 		}
 	}
 
@@ -631,21 +919,31 @@ static int rz_rproc_probe(struct platform_device *pdev)
 	pm_runtime_enable(dev);
 
 	/* Detect whether the remote processor is already running */
-	regmap_read(pdata->cpg_regmap, data->rstmon_reg, &val);
-	running = !(val & data->rstmon_mask);
+	ret = rz_rproc_check_running(pdev, pdata, &running);
+	if (ret)
+		goto error;
 
 	if (running) {
-		dev_info(dev, "CM33 released from reset by bootloader\n");
+		dev_info(dev, "remote core released from reset by bootloader\n");
 
-		if (data->detach_on_boot)
+		if (data->detach_on_boot) {
+			/* RZ/G2L: attach to already-running firmware */
 			rproc->state = RPROC_DETACHED;
-
-		pm_runtime_get_sync(dev);
-
-		if (data->detach_on_boot)
-			rzg2l_rproc_load_rsc_table(dev, rproc);
-
-		rz_rproc_prepare(rproc);
+			pm_runtime_get_sync(dev);
+			rz_rproc_attach_rsc_table(dev, rproc);
+			rz_rproc_prepare(rproc);
+		} else {
+			/*
+			 * RZ/V2H: bootloader may have started the core, but
+			 * Linux takes full control. Leave as RPROC_OFFLINE so
+			 * userspace can load firmware normally via sysfs.
+			 * rzv2h_cm33_startup() handles the clock-already-ON
+			 * case gracefully.
+			 */
+			dev_info(dev, "bootloader state ignored, staying OFFLINE\n");
+			pm_runtime_get_sync(dev);
+			rz_rproc_prepare(rproc);
+		}
 	}
 
 	platform_set_drvdata(pdev, rproc);
@@ -656,7 +954,7 @@ static int rz_rproc_probe(struct platform_device *pdev)
 		goto error;
 	}
 
-	dev_info(dev, "probed\n");
+	dev_info(dev, "probed (core %u)\n", pdata->core);
 
 	return 0;
 
@@ -675,12 +973,12 @@ static void rz_rproc_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id rz_rproc_of_match[] = {
-	{ .compatible = "renesas,rzv2h-cm33",  .data = &rzv2h_rproc_data },
-	{ .compatible = "renesas,rzg2l-cm33",  .data = &rzg2l_rproc_data },
+	{ .compatible = "renesas,rzv2h-cm33", .data = &rzv2h_rproc_data },
+	{ .compatible = "renesas,rzv2h-cr8",  .data = &rzv2h_cr8_rproc_data },
+	{ .compatible = "renesas,rzg2l-cm33", .data = &rzg2l_rproc_data },
 	{ /* end of list */ },
 };
 MODULE_DEVICE_TABLE(of, rz_rproc_of_match);
-
 static struct platform_driver rz_rproc_driver = {
 	.probe	= rz_rproc_probe,
 	.remove = rz_rproc_remove,
