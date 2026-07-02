@@ -3438,7 +3438,7 @@
 		};
 
 		cm33_rproc: cm33 {
-			compatible = "renesas,rz-cm33";
+			compatible = "renesas,rzv2h-cm33";
 			reg = <0x0 0x08000000 0x0 0x00FFFFF>,
 			      <0x0 0x40010000 0x0 0x3EF0000>;
 			reg-names = "cm33_sram", "cm33_ddr";

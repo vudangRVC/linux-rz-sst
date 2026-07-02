@@ -14,17 +14,23 @@
 #include "remoteproc_internal.h"
 
 /* Common CM33/CA55 address map (identical on both SoCs) */
-#define CM33_SRAM_START		0x00000000
-#define CM33_SRAM_END		0x3FFFFFFF
-#define CM33_DDR_START		0x60000000
-#define CM33_DDR_END		0x7FFFFFFF
-#define CA55_SRAM_START		0x00000000
-#define CA55_DDR_START		0x40000000
-#define CA55_DDR_CM33_START	0x40010000
-#define CA55_DDR_CM33_END	0x43EFFFFF
-#define CM33_TO_CA55_MASK	0x0FFFFFFF
+#define CM33_SRAM_START			0x00000000
+#define CM33_SRAM_END			0x3FFFFFFF
+#define CA55_SRAM_START			0x00000000
+#define CA55_DDR_START			0x40000000
+#define CA55_DDR_CM33_START		0x40010000
+#define CA55_DDR_CM33_END		0x43EFFFFF
+#define CM33_TO_CA55_MASK		0x0FFFFFFF
 
-#define RSC_TBL_SIZE		0x1000
+#define RSC_TBL_SIZE			0x1000
+
+/* RZ/V2H CM33 DDR (view) range */
+#define RZV2H_CM33_DDR_START	0x80000000
+#define RZV2H_CM33_DDR_END		0x9FFFFFFF
+
+/* RZ/G2L CM33 DDR (view) range */
+#define RZG2L_CM33_DDR_START	0x60000000
+#define RZG2L_CM33_DDR_END		0x7FFFFFFF
 
 /* ------------------------------------------------------------------ */
 /* RZ/V2H specific registers and masks                                */
@@ -55,10 +61,16 @@
 #define RZG2L_SYS_CM33_CFG2		0x80C
 #define RZG2L_SYS_CM33_CFG3		0x810
 
+enum rz_rproc_variant {
+	RZ_VARIANT_RZV2H,
+	RZ_VARIANT_RZG2L,
+};
+
 struct rz_rproc_pdata;
 
 /* Per-variant descriptor */
 struct rz_rproc_data {
+	enum rz_rproc_variant variant;
 	int (*start)(struct rproc *rproc);
 	int (*stop)(struct rproc *rproc);
 	int (*parse_fw)(struct rproc *rproc, const struct firmware *fw);
@@ -198,12 +210,26 @@ static void rz_rproc_kick(struct rproc *rproc, int vqid)
 	/* Not supported Linux RPMsg yet */
 }
 
-static int cm33_to_ca55(u64 *da)
+static int cm33_to_ca55(struct rz_rproc_pdata *pdata, u64 *da)
 {
+	u32 ddr_start, ddr_end;
+
+	/* SRAM range is identical on both SoCs */
 	if ((CM33_SRAM_END >= *da) && (*da >= CM33_SRAM_START)) {
 		*da = CA55_SRAM_START + (*da & CM33_TO_CA55_MASK);
 		return 0;
-	} else if ((CM33_DDR_END >= *da) && (*da >= CM33_DDR_START)) {
+	}
+
+	/* DDR view differs per SoC - select by compatible/variant */
+	if (pdata->data->variant == RZ_VARIANT_RZV2H) {
+		ddr_start = RZV2H_CM33_DDR_START;
+		ddr_end   = RZV2H_CM33_DDR_END;
+	} else {
+		ddr_start = RZG2L_CM33_DDR_START;
+		ddr_end   = RZG2L_CM33_DDR_END;
+	}
+
+	if ((ddr_end >= *da) && (*da >= ddr_start)) {
 		*da = CA55_DDR_START + (*da & CM33_TO_CA55_MASK);
 		return 0;
 	}
@@ -215,6 +241,7 @@ static void *rz_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len,
 			       bool *is_iomem)
 {
 	struct device *dev = rproc->dev.parent;
+	struct rz_rproc_pdata *pdata = rproc->priv;
 	struct rproc_mem_entry *carveout;
 	void *ptr = NULL;
 	int ret;
@@ -222,9 +249,9 @@ static void *rz_rproc_da_to_va(struct rproc *rproc, u64 da, size_t len,
 	if ((CA55_DDR_CM33_END >= da) && (da >= CA55_DDR_CM33_START)) {
 		/* @da is address of trace buffer. Do nothing. */
 	} else {
-		ret = cm33_to_ca55(&da);
+		ret = cm33_to_ca55(pdata, &da);
 		if (ret) {
-			dev_err(dev, "invalid address\n");
+			dev_err(dev, "invalid address 0x%llx\n", da);
 			return ptr;
 		}
 	}
@@ -468,6 +495,7 @@ static const char * const rzg2l_reset_names[] = {
 };
 
 static const struct rz_rproc_data rzv2h_rproc_data = {
+	.variant		= RZ_VARIANT_RZV2H,
 	.start			= rzv2h_rproc_start,
 	.stop			= rzv2h_rproc_stop,
 	.parse_fw		= rzv2h_rproc_parse_fw,
@@ -480,6 +508,7 @@ static const struct rz_rproc_data rzv2h_rproc_data = {
 };
 
 static const struct rz_rproc_data rzg2l_rproc_data = {
+	.variant		= RZ_VARIANT_RZG2L,
 	.start			= rzg2l_rproc_start,
 	.stop			= rzg2l_rproc_stop,
 	.parse_fw		= rzg2l_rproc_parse_fw,
