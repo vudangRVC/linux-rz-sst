@@ -41,9 +41,11 @@
 		reg = <0x0 0x42f01000 0x0 0x1000>;
 		no-map;
 	};
+};
 
-	mbox-uio@10400000 {
-		compatible = "mbox_uio";
+&soc {
+	mbox_uio: mbox-uio@10400000 {
+		compatible = "generic-uio";
 		reg = <0x0 0x10400000 0x0 0x1000>;
 		interrupt-parent = <&gic>;
 		interrupts = <GIC_SPI 75 IRQ_TYPE_LEVEL_HIGH>;

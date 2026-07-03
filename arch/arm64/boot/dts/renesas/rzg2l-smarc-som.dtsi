@@ -36,54 +36,36 @@
 	};
 
 	reserved-memory {
-                #address-cells = <2>;
-                #size-cells = <2>;
-                ranges;
+		#address-cells = <2>;
+		#size-cells = <2>;
+		ranges;
 
-                global_cma: linux,cma@58000000 {
-                        compatible = "shared-dma-pool";
-                        linux,cma-default;
-                        reusable;
-                        reg = <0x0 0x58000000 0x0 0x10000000>;
-                };
+		global_cma: linux,cma@58000000 {
+				compatible = "shared-dma-pool";
+				linux,cma-default;
+				reusable;
+				reg = <0x0 0x58000000 0x0 0x10000000>;
+		};
 
-                mmp_reserved: linux,multimedia {
-                        compatible = "shared-dma-pool";
-                        reusable;
-                        reg = <0x0 0x68000000 0x0 0x8000000>;
-                };
+		mmp_reserved: linux,multimedia {
+				compatible = "shared-dma-pool";
+				reusable;
+				reg = <0x0 0x68000000 0x0 0x8000000>;
+		};
+	};
 
-                vdev0vring0: vdev0vring0@43000000 {
-                        compatible = "shared-dma-pool";
-                        reg = <0x0 0x43000000 0x0 0x50000>;
-                        no-map;
-                };
+	mmngr {
+		compatible = "renesas,mmngr";
+		memory-region = <&mmp_reserved>;
+	};
 
-                vdev0vring1: vdev0vring1@43050000 {
-                        compatible = "shared-dma-pool";
-                        reg = <0x0 0x43050000 0x0 0x50000>;
-                        no-map;
-                };
+	mmngrbuf {
+		compatible = "renesas,mmngrbuf";
+	};
 
-                vdev0buffer: vdev0buffer@43200000 {
-                        compatible = "shared-dma-pool";
-                        reg = <0x0 0x43200000 0x0 0x300000>;
-                        no-map;
-                };
-        };
-
-        mmngr {
-                compatible = "renesas,mmngr";
-                memory-region = <&mmp_reserved>;
-        };
-
-        mmngrbuf {
-                compatible = "renesas,mmngrbuf";
-        };
-
-        vspm_if {
-                compatible = "renesas,vspm_if";
-        };
+	vspm_if {
+		compatible = "renesas,vspm_if";
+	};
 
 	reg_1p8v: regulator-1p8v {
 		compatible = "regulator-fixed";

@@ -8,67 +8,143 @@
 / {
 	compatible = "renesas,r9a09g057h4", "renesas,r9a09g057";
 
-       vring-ctl0@43000000 {
-               compatible = "vring_uio";
-               reg = <0x0 0x43000000 0x0 0x100000>;
-               no-map;
-       };
+	vring-ctl0@43000000 {
+		compatible = "vring_uio";
+		reg = <0x0 0x43000000 0x0 0x100000>;
+		no-map;
+	};
 
-       vring-ctl1@43100000 {
-               compatible = "vring_uio";
-               reg = <0x0 0x43100000 0x0 0x100000>;
-               no-map;
-       };
+	vring-ctl1@43100000 {
+		compatible = "vring_uio";
+		reg = <0x0 0x43100000 0x0 0x100000>;
+		no-map;
+	};
 
-       vring-shm0@43200000 {
-               compatible = "shm_uio";
-               reg = <0x0 0x43200000 0x0 0x300000>;
-               no-map;
-       };
+	vring-shm0@43200000 {
+		compatible = "shm_uio";
+		reg = <0x0 0x43200000 0x0 0x300000>;
+		no-map;
+	};
 
-       vring-shm1@43500000 {
-               compatible = "shm_uio";
-               reg = <0x0 0x43500000 0x0 0x300000>;
-               no-map;
-       };
+	vring-shm1@43500000 {
+		compatible = "shm_uio";
+		reg = <0x0 0x43500000 0x0 0x300000>;
+		no-map;
+	};
 
-       rsctbl@42f00000 {
-               compatible = "shm_uio";
-               reg = <0x0 0x42f00000 0x0 0x1000>;
-               no-map;
-       };
+	rsctbl@42f00000 {
+		compatible = "shm_uio";
+		reg = <0x0 0x42f00000 0x0 0x1000>;
+		no-map;
+	};
 
-       mhu-shm@42f01000 {
-               compatible = "shm_uio";
-               reg = <0x0 0x42f01000 0x0 0x1000>;
-               no-map;
-       };
+	mhu-shm@42f01000 {
+		compatible = "shm_uio";
+		reg = <0x0 0x42f01000 0x0 0x1000>;
+		no-map;
+	};
 
-       mbox-uio@10480000 {
-               compatible = "mbox_uio";
-               reg = <0x00 0x10480000 0x00 0x1000>;
-               status = "okay";
-       };
+	mbox-uio@10480000 {
+		compatible = "mbox_uio";
+		reg = <0x00 0x10480000 0x00 0x1000>;
+		status = "okay";
+	};
 
-       receiver@10480100 {
-               compatible = "receiver";
-               interrupt-parent = <&gic>;
-               interrupts = <0x00 0x181 0x04>;
-               status = "okay";
-       };
+	receiver@10480100 {
+		compatible = "receiver";
+		interrupt-parent = <&gic>;
+		interrupts = <0x00 0x181 0x04>;
+		status = "okay";
+	};
 
-       receiver@104800C0 {
-              compatible = "receiver";
-               interrupt-parent = <&gic>;
-               interrupts = <0x00 0x17f 0x04>;
-               status = "okay";
-       };
+	receiver@104800C0 {
+		compatible = "receiver";
+		interrupt-parent = <&gic>;
+		interrupts = <0x00 0x17f 0x04>;
+		status = "okay";
+	};
 
-       receiver@104800E0 {
-               compatible = "receiver";
-               interrupt-parent = <&gic>;
-               interrupts = <0x00 0x180 0x04>;
-               status = "okay";
-       };
+	receiver@104800E0 {
+		compatible = "receiver";
+		interrupt-parent = <&gic>;
+		interrupts = <0x00 0x180 0x04>;
+		status = "okay";
+	};
+
+	soc: soc {
+		cm33_rproc: cm33 {
+			compatible = "renesas,rzv2h-cm33";
+			reg = <0x0 0x08000000 0x0 0x00FFFFF>,
+			      <0x0 0x40010000 0x0 0x007FFFFF>,
+			      <0x0 0x42f00000 0x0 0x01F00000>;
+			reg-names = "cm33_sram", "cm33_ddr", "cm33_rsc_table";
+			memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
+			renesas,rz-core = <0x0>;
+			renesas,rz-cpg = <&cpg>;
+			renesas,rz-sysc = <&sys>;
+			renesas,rz-bootaddrs = <0x08003000>, <0x18003000>;
+			renesas,rz-rsctbl = <0x42F00000>;
+			clocks = <&cpg CPG_MOD R9A09G057_CM33_CLK1>;
+			clock-names = "cm33clk1";
+			resets = <&cpg R9A09G057_CM33_RESET2>,
+				 <&cpg R9A09G057_CM33_RESET0>,
+				 <&cpg R9A09G057_CM33_RESET1>;
+			reset-names = "cm33reset2", "cm33reset0", "cm33reset1";
+			power-domains = <&cpg>;
+			status = "okay";
+		};
+
+		cr8_0_rproc: cr8_0 {
+			compatible = "renesas,rzv2h-cr8";
+			reg = <0x0 0x08180000 0x0 0x00080000>,
+			      <0x0 0x12040000 0x0 0x0003FFFF>,
+			      <0x0 0x40800000 0x0 0x01000000>,
+			      <0x0 0x42f00000 0x0 0x01000000>;
+			reg-names = "cr8_sram3", "cr8_tcm", "cr8_ddr", "cr8_rsc_table";
+			memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
+			renesas,rz-core = <0x1>;
+			renesas,rz-cpg  = <&cpg>;
+			renesas,rz-sysc = <&sys>;
+			renesas,rz-rsctbl = <0x42F00000>;
+			power-domains = <&cpg>;
+			status = "okay";
+		};
+
+		cr8_1_rproc: cr8_1 {
+			compatible = "renesas,rzv2h-cr8";
+			reg = <0x0 0x081BFFFC 0x0 0x00080000>,
+			      <0x0 0x12080000 0x0 0x0003FFFF>,
+			      <0x0 0x41800000 0x0 0x01000000>,
+			      <0x0 0x42F00000 0x0 0x01000000>;
+			reg-names = "cr8_sram3", "cr8_tcm", "cr8_ddr", "cr8_rsc_table";
+			memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
+			renesas,rz-core = <0x2>;
+			renesas,rz-cpg = <&cpg>;
+			renesas,rz-sysc = <&sys>;
+			renesas,rz-rsctbl = <0x42F00000>;
+			power-domains = <&cpg>;
+			status = "okay";
+		};
+	};
+
+	reserved-memory {
+		vdev0vring0: vdev0vring0@0x43000000 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x43000000 0x0 0x50000>;
+			no-map;
+		};
+
+		vdev0vring1: vdev0vring1@0x43050000 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x43050000 0x0 0x50000>;
+			no-map;
+		};
+
+		vdev0buffer: vdev0buffer@0x43200000 {
+			compatible = "shared-dma-pool";
+			reg = <0x0 0x43200000 0x0 0x300000>;
+			no-map;
+		};
+	};
 };
 
