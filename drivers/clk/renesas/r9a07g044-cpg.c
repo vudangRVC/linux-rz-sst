@@ -236,7 +236,7 @@ static const struct {
 };
 
 static const struct {
-	struct rzg2l_mod_clk common[86];
+	struct rzg2l_mod_clk common[89];
 #ifdef CONFIG_CLK_R9A07G054
 	struct rzg2l_mod_clk drp[5];
 #endif
@@ -248,6 +248,8 @@ static const struct {
 					0x518, 0, MSTOP(BUS_PERI_CPU, BIT(13))),
 		DEF_MOD("ia55_clk",	R9A07G044_IA55_CLK, R9A07G044_CLK_P1,
 					0x518, 1, MSTOP(BUS_PERI_CPU, BIT(13))),
+		DEF_MOD("mhu_pclk",	R9A07G044_MHU_PCLK, R9A07G044_CLK_P0,
+					0x51c, 0, MSTOP(BUS_PERI_CPU, BIT(14))),
 		DEF_MOD("dmac_aclk",	R9A07G044_DMAC_ACLK, R9A07G044_CLK_P1,
 					0x52c, 0, MSTOP(BUS_REG1, BIT(2))),
 		DEF_MOD("dmac_pclk",	R9A07G044_DMAC_PCLK, CLK_P1_DIV2,
@@ -344,6 +346,10 @@ static const struct {
 					0x56c, 0, MSTOP(BUS_PERI_VIDEO, GENMASK(8, 7))),
 		DEF_MOD("lcdc_clk_d",	R9A07G044_LCDC_CLK_D, R9A07G044_CLK_M3,
 					0x56c, 1, MSTOP(BUS_PERI_VIDEO, BIT(9))),
+		DEF_MOD("cm33_clkin",  R9A07G044_CM33_CLKIN, R9A07G044_CLK_I2,
+					0x504, 0, 0),
+		DEF_MOD("cm33_tsclk",  R9A07G044_CM33_TSCLK, R9A07G044_OSCCLK,
+					0x504, 1, 0),
 		DEF_MOD("ssi0_pclk",	R9A07G044_SSI0_PCLK2, R9A07G044_CLK_P0,
 					0x570, 0, MSTOP(BUS_MCPU1, BIT(10))),
 		DEF_MOD("ssi0_sfr",	R9A07G044_SSI0_PCLK_SFR, R9A07G044_CLK_P0,
@@ -499,6 +505,9 @@ static const struct rzg2l_reset r9a07g044_resets[] = {
 	DEF_RST(R9A07G044_ADC_PRESETN, 0x8a8, 0),
 	DEF_RST(R9A07G044_ADC_ADRST_N, 0x8a8, 1),
 	DEF_RST(R9A07G044_TSU_PRESETN, 0x8ac, 0),
+	DEF_RST(R9A07G044_CM33_NPORESET, 0x804, 0),
+	DEF_RST(R9A07G044_CM33_NSYSRESET, 0x804, 1),
+	DEF_RST(R9A07G044_CM33_MISCRESETN, 0x804, 2),
 #ifdef CONFIG_CLK_R9A07G054
 	DEF_RST(R9A07G054_STPAI_ARESETN, 0x8e8, 0),
 	DEF_RST(R9A07G054_CM33_NPORESET, 0x804, 0),
@@ -564,7 +573,7 @@ const struct rzg2l_cpg_info r9a07g054_cpg_info = {
 	/* Module Clocks */
 	.mod_clks = mod_clks.common,
 	.num_mod_clks = ARRAY_SIZE(mod_clks.common) + ARRAY_SIZE(mod_clks.drp),
-	.num_hw_mod_clks = R9A07G054_STPAI_ACLK_DRP + 1,
+	.num_hw_mod_clks = R9A07G044_CM33_TSCLK + 1,
 
 	/* No PM Module Clocks */
 	.no_pm_mod_clks = r9a07g044_no_pm_mod_clks,
@@ -572,7 +581,7 @@ const struct rzg2l_cpg_info r9a07g054_cpg_info = {
 
 	/* Resets */
 	.resets = r9a07g044_resets,
-	.num_resets = R9A07G054_STPAI_ARESETN + 1, /* Last reset ID + 1 */
+	.num_resets = R9A07G044_CM33_MISCRESETN + 1, /* Last reset ID + 1 */
 
 	.has_clk_mon_regs = true,
 };
