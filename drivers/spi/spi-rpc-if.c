@@ -153,6 +153,7 @@ static const struct rpcif_ops rpc_ops = {
 	.dirmap_read	= rpcif_dirmap_read,
 };
 
+#if IS_ENABLED(CONFIG_RENESAS_XSPI)
 static const struct rpcif_ops xspi_ops = {
 	.sw_init	= xspi_sw_init,
 	.hw_init	= xspi_hw_init,
@@ -161,6 +162,7 @@ static const struct rpcif_ops xspi_ops = {
 	.dirmap_read	= xspi_dirmap_read,
 	.dirmap_write	= xspi_dirmap_write,
 };
+#endif
 
 static int rpcif_spi_probe(struct platform_device *pdev)
 {
@@ -175,11 +177,13 @@ static int rpcif_spi_probe(struct platform_device *pdev)
 
 	rpc = spi_controller_get_devdata(ctlr);
 
+#if IS_ENABLED(CONFIG_RENESAS_XSPI)
 	if (of_device_is_compatible(parent->of_node, "renesas,g3s-xspi-if") ||
 	    of_device_is_compatible(parent->of_node, "renesas,v2h-xspi-if") ||
 	    of_device_is_compatible(parent->of_node, "renesas,g3e-xspi-if"))
 		rpc->ops = &xspi_ops;
 	else
+#endif
 		rpc->ops = &rpc_ops;
 
 	error = rpc->ops->sw_init(rpc, parent);
