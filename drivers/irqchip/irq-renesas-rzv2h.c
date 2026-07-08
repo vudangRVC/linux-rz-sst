@@ -141,7 +141,7 @@ static inline struct rzv2h_icu_priv *irq_data_to_priv(struct irq_data *data)
 	return data->domain->host_data;
 }
 
-static void rzv2h_clear_nmi_int(struct rzv2h_icu_priv *priv)
+static void __maybe_unused rzv2h_clear_nmi_int(struct rzv2h_icu_priv *priv)
 {
 	u32 nscnt = readl_relaxed(priv->base + ICU_NSCNT);
 
