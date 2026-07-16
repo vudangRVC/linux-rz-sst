@@ -1461,25 +1461,24 @@
 		};
 
 		cm33_rproc: cm33 {
-			compatible = "renesas,rz-cm33";
+			compatible = "renesas,rzg2l-cm33";
 			reg = <0x0 0x00010000 0x0 0x0000800>,
 					<0x0 0x0001FF80 0x0 0x0000080>,
 					<0x0 0x40010000 0x0 0x3EF0000>;
 			reg-names = "cm33_sram_ns", "cm33_sram_s", "cm33_ddr";
-			memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
 			renesas,rz-cpg = <&cpg>;
 			renesas,rz-sysc = <&sysc>;
 			renesas,rz-bootaddrs = <0x1001FF80>, <0x00010000>;
 			renesas,rz-rsctbl = <0x42F00000>;
 			clocks = <&cpg CPG_MOD R9A07G054_CM33_CLKIN>,
-						<&cpg CPG_MOD R9A07G054_CM33_TSCLK>;
+					<&cpg CPG_MOD R9A07G054_CM33_TSCLK>;
 			clock-names = "clkin", "tsclk";
 			resets = <&cpg R9A07G054_CM33_NPORESET>,
-							<&cpg R9A07G054_CM33_NSYSRESET>,
-							<&cpg R9A07G054_CM33_MISCRESETN>;
+					<&cpg R9A07G054_CM33_NSYSRESET>,
+					<&cpg R9A07G054_CM33_MISCRESETN>;
 			reset-names = "nporeset", "nsysreset", "miscresetn";
 			power-domains = <&cpg>;
-			status = "okay";
+			status = "disabled";
 		};
 
 		gpu: gpu@11840000 {
