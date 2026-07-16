@@ -527,7 +527,8 @@ static void brcmf_fw_free_request(struct brcmf_fw_request *req)
 	int i;
 
 	for (i = 0, item = &req->items[0]; i < req->n_items; i++, item++) {
-		if (item->type == BRCMF_FW_TYPE_BINARY)
+		if (item->type == BRCMF_FW_TYPE_BINARY ||
+		    item->type == BRCMF_FW_TYPE_TRXSE)
 			release_firmware(item->binary);
 		else if (item->type == BRCMF_FW_TYPE_NVRAM)
 			brcmf_fw_nvram_free(item->nv_data.data);
@@ -602,6 +603,7 @@ static int brcmf_fw_complete_request(const struct firmware *fw,
 	case BRCMF_FW_TYPE_NVRAM:
 		ret = brcmf_fw_request_nvram_done(fw, fwctx);
 		break;
+	case BRCMF_FW_TYPE_TRXSE:
 	case BRCMF_FW_TYPE_BINARY:
 		if (fw)
 			cur->binary = fw;

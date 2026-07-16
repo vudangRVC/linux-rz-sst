@@ -707,6 +707,11 @@ static u32 brcmf_chip_tcm_ramsize(struct brcmf_core_priv *cr4)
 	return memsize;
 }
 
+/* CYW55572 dedicated TCAM and TRX header space */
+#define CYW55572_TCAM_SIZE	0x800
+#define CYW55572_TRXHDR_SIZE	0x2b4
+#define CYW55572_RAM_BASE	(0x370000 + CYW55572_TCAM_SIZE + CYW55572_TRXHDR_SIZE)
+
 static u32 brcmf_chip_tcm_rambase(struct brcmf_chip_priv *ci)
 {
 	switch (ci->pub.chip) {
@@ -746,6 +751,8 @@ static u32 brcmf_chip_tcm_rambase(struct brcmf_chip_priv *ci)
 		return 0x352000;
 	case BRCM_CC_4387_CHIP_ID:
 		return 0x740000;
+	case CY_CC_55572_CHIP_ID:
+		return CYW55572_RAM_BASE;
 	default:
 		brcmf_err("unknown chip: %s\n", ci->pub.name);
 		break;
@@ -796,6 +803,10 @@ int brcmf_chip_get_raminfo(struct brcmf_chip *pub)
 	brcmf_dbg(INFO, "RAM: base=0x%x size=%d (0x%x) sr=%d (0x%x)\n",
 		  ci->pub.rambase, ci->pub.ramsize, ci->pub.ramsize,
 		  ci->pub.srsize, ci->pub.srsize);
+
+	/* Adjust usable RAM size for CYW55572 reserved regions */
+	if (ci->pub.chip == CY_CC_55572_CHIP_ID)
+		ci->pub.ramsize -= (CYW55572_TCAM_SIZE + CYW55572_TRXHDR_SIZE);
 
 	if (!ci->pub.ramsize) {
 		brcmf_err("RAM size is undetermined\n");

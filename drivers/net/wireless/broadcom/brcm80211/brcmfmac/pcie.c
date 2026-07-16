@@ -72,6 +72,7 @@ BRCMF_FW_CLM_DEF(4378B1, "brcmfmac4378b1-pcie");
 BRCMF_FW_CLM_DEF(4378B3, "brcmfmac4378b3-pcie");
 BRCMF_FW_CLM_DEF(4387C2, "brcmfmac4387c2-pcie");
 BRCMF_FW_CLM_DEF(54591, "brcmfmac54591-pcie");
+CY_FW_TRXSE_DEF(55572, "cyfmac55572-pcie");
 
 /* firmware config files */
 MODULE_FIRMWARE(BRCMF_FW_DEFAULT_PATH "brcmfmac*-pcie.txt");
@@ -112,6 +113,7 @@ static const struct brcmf_firmware_mapping brcmf_pcie_fwnames[] = {
 	BRCMF_FW_ENTRY(BRCM_CC_4378_CHIP_ID, 0x0000000F, 4378B1), /* revision ID 3 */
 	BRCMF_FW_ENTRY(BRCM_CC_4378_CHIP_ID, 0xFFFFFFE0, 4378B3), /* revision ID 5 */
 	BRCMF_FW_ENTRY(BRCM_CC_4387_CHIP_ID, 0xFFFFFFFF, 4387C2), /* revision ID 7 */
+	BRCMF_FW_ENTRY(CY_CC_55572_CHIP_ID, 0xFFFFFFFF, 55572),
 };
 
 #define BRCMF_PCIE_FW_UP_TIMEOUT		5000 /* msec */
@@ -124,7 +126,8 @@ static const struct brcmf_firmware_mapping brcmf_pcie_fwnames[] = {
 #define	BRCMF_PCIE_BAR0_WRAPPERBASE		0x70
 
 #define BRCMF_PCIE_BAR0_WRAPBASE_DMP_OFFSET	0x1000
-#define BRCMF_PCIE_BARO_PCIE_ENUM_OFFSET	0x2000
+#define BRCMF_PCIE_BAR0_PCIE_ENUM_OFFSET	0x2000
+#define BRCMF_CYW55572_PCIE_BAR0_PCIE_ENUM_OFFSET	0x3000
 
 #define BRCMF_PCIE_ARMCR4REG_BANKIDX		0x40
 #define BRCMF_PCIE_ARMCR4REG_BANKPDA		0x4C
@@ -1677,6 +1680,20 @@ struct brcmf_random_seed_footer {
 #define BRCMF_RANDOM_SEED_MAGIC		0xfeedc0de
 #define BRCMF_RANDOM_SEED_LENGTH	0x100
 
+/* Cypress TRXSE firmware entropy/NVRAM token constants */
+#define BRCMF_ENTROPY_SEED_LEN		64u
+#define BRCMF_ENTROPY_NONCE_LEN		16u
+#define BRCMF_ENTROPY_HOST_LEN		(BRCMF_ENTROPY_SEED_LEN + \
+					 BRCMF_ENTROPY_NONCE_LEN)
+#define BRCMF_NVRAM_OFFSET_TCM		4u
+#define BRCMF_NVRAM_COMPRS_FACTOR	4u
+#define BRCMF_NVRAM_RNG_SIGNATURE	0xFEEDC0DEu
+
+struct brcmf_rand_metadata {
+	u32 signature;
+	u32 count;
+};
+
 static noinline_for_stack void
 brcmf_pcie_provide_random_bytes(struct brcmf_pciedev_info *devinfo, u32 address)
 {
@@ -1684,6 +1701,31 @@ brcmf_pcie_provide_random_bytes(struct brcmf_pciedev_info *devinfo, u32 address)
 
 	get_random_bytes(randbuf, BRCMF_RANDOM_SEED_LENGTH);
 	memcpy_toio(devinfo->tcm + address, randbuf, BRCMF_RANDOM_SEED_LENGTH);
+}
+
+/* Write entropy data before NVRAM for Cypress TRXSE firmware.
+ * The firmware uses this to randomize its heap layout.
+ */
+static void
+brcmf_pcie_write_rand(struct brcmf_pciedev_info *devinfo, u32 nvram_csm)
+{
+	struct brcmf_rand_metadata rand_data;
+	u8 rand_buf[BRCMF_ENTROPY_HOST_LEN];
+	u32 count = BRCMF_ENTROPY_HOST_LEN;
+	u32 address;
+
+	/* Place entropy just before NVRAM in TCM */
+	address = devinfo->ci->rambase +
+		  (devinfo->ci->ramsize - BRCMF_NVRAM_OFFSET_TCM) -
+		  ((nvram_csm & 0xffff) * BRCMF_NVRAM_COMPRS_FACTOR) -
+		  sizeof(rand_data);
+	memset(rand_buf, 0, BRCMF_ENTROPY_HOST_LEN);
+	rand_data.signature = cpu_to_le32(BRCMF_NVRAM_RNG_SIGNATURE);
+	rand_data.count = cpu_to_le32(count);
+	memcpy_toio(devinfo->tcm + address, &rand_data, sizeof(rand_data));
+	get_random_bytes(rand_buf, BRCMF_ENTROPY_HOST_LEN);
+	address -= BRCMF_ENTROPY_HOST_LEN;
+	memcpy_toio(devinfo->tcm + address, rand_buf, BRCMF_ENTROPY_HOST_LEN);
 }
 
 static int brcmf_pcie_download_fw_nvram(struct brcmf_pciedev_info *devinfo,
@@ -1697,6 +1739,8 @@ static int brcmf_pcie_download_fw_nvram(struct brcmf_pciedev_info *devinfo,
 	int err;
 	u32 address;
 	u32 resetintr;
+	u32 nvram_lenw;
+	u32 nvram_csm;
 
 	brcmf_dbg(PCIE, "Halt ARM.\n");
 	err = brcmf_pcie_enter_download_state(devinfo);
@@ -1722,6 +1766,10 @@ static int brcmf_pcie_download_fw_nvram(struct brcmf_pciedev_info *devinfo,
 		memcpy_toio(devinfo->tcm + address, nvram, nvram_len);
 		brcmf_fw_nvram_free(nvram);
 
+		/* Compute NVRAM checksum/length token for Cypress firmware */
+		nvram_lenw = nvram_len / 4;
+		nvram_csm = (~nvram_lenw << 16) | (nvram_lenw & 0x0000FFFF);
+
 		if (devinfo->fwseed) {
 			size_t rand_len = BRCMF_RANDOM_SEED_LENGTH;
 			struct brcmf_random_seed_footer footer = {
@@ -1742,8 +1790,20 @@ static int brcmf_pcie_download_fw_nvram(struct brcmf_pciedev_info *devinfo,
 			brcmf_pcie_provide_random_bytes(devinfo, address);
 		}
 	} else {
+		nvram_csm = 0;
 		brcmf_dbg(PCIE, "No matching NVRAM file found %s\n",
 			  devinfo->nvram_name);
+	}
+
+	/* Cypress TRXSE firmware (cypress/ path prefix) requires the NVRAM
+	 * length token written to ramsize-4 and entropy data before NVRAM.
+	 * This is generic: any chip using CY_FW_TRXSE_DEF gets this.
+	 */
+	if (!strncmp(devinfo->fw_name, CY_FW_DEFAULT_PATH,
+		     strlen(CY_FW_DEFAULT_PATH))) {
+		brcmf_pcie_write_ram32(devinfo, devinfo->ci->ramsize - 4,
+				       cpu_to_le32(nvram_csm));
+		brcmf_pcie_write_rand(devinfo, nvram_csm);
 	}
 
 	sharedram_addr_written = brcmf_pcie_read_ram32(devinfo,
@@ -2249,7 +2309,25 @@ brcmf_pcie_prepare_fw_request(struct brcmf_pciedev_info *devinfo)
 	if (!fwreq)
 		return NULL;
 
-	fwreq->items[BRCMF_PCIE_FW_CODE].type = BRCMF_FW_TYPE_BINARY;
+	/* Determine firmware type from path prefix:
+	 * Paths under cypress/ use .trxse format (e.g. CYW55572/55573),
+	 * all others use standard .bin format.
+	 * This is derived from the CY_FW_TRXSE_DEF macro setting the
+	 * cypress/ prefix in the firmware basename.
+	 */
+	if (!strncmp(fwreq->items[BRCMF_PCIE_FW_CODE].path,
+		     CY_FW_DEFAULT_PATH, strlen(CY_FW_DEFAULT_PATH))) {
+		char *p = devinfo->fw_name;
+		size_t n = strlen(p);
+
+		/* replace .bin extension with .trxse */
+		if (n > 4 && !strcmp(p + n - 4, ".bin"))
+			strscpy(p + n - 4, ".trxse",
+				BRCMF_FW_NAME_LEN - (n - 4));
+		fwreq->items[BRCMF_PCIE_FW_CODE].type = BRCMF_FW_TYPE_TRXSE;
+	} else {
+		fwreq->items[BRCMF_PCIE_FW_CODE].type = BRCMF_FW_TYPE_BINARY;
+	}
 	fwreq->items[BRCMF_PCIE_FW_NVRAM].type = BRCMF_FW_TYPE_NVRAM;
 	fwreq->items[BRCMF_PCIE_FW_NVRAM].flags = BRCMF_FW_REQF_OPTIONAL;
 	fwreq->items[BRCMF_PCIE_FW_CLM].type = BRCMF_FW_TYPE_BINARY;
@@ -2721,6 +2799,13 @@ static const struct dev_pm_ops brcmf_pciedrvr_pm = {
 		PCI_CLASS_NETWORK_OTHER << 8, 0xffff00, \
 		BRCMF_DRVDATA_ ## fw_vend \
 	}
+#define BRCMF_PCIE_DEVICE_CY(dev_id, fw_vend) \
+	{ \
+		CY_PCIE_VENDOR_ID_CYPRESS, (dev_id), \
+		PCI_ANY_ID, PCI_ANY_ID, \
+		PCI_CLASS_NETWORK_OTHER << 8, 0xffff00, \
+		BRCMF_DRVDATA_ ## fw_vend \
+	}
 
 static const struct pci_device_id brcmf_pcie_devid_table[] = {
 	BRCMF_PCIE_DEVICE(BRCM_PCIE_4350_DEVICE_ID, WCC),
@@ -2752,6 +2837,7 @@ static const struct pci_device_id brcmf_pcie_devid_table[] = {
 	BRCMF_PCIE_DEVICE(BRCM_PCIE_4387_DEVICE_ID, WCC_SEED),
 	BRCMF_PCIE_DEVICE(BRCM_PCIE_43752_DEVICE_ID, WCC_SEED),
 	BRCMF_PCIE_DEVICE(CY_PCIE_54591_DEVICE_ID, CYW),
+	BRCMF_PCIE_DEVICE_CY(CY_PCIE_55572_DEVICE_ID, CYW),
 	{ /* end: all zeroes */ }
 };
 
