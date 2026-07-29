@@ -10,6 +10,8 @@
 #define CORE_CC_REG(base, field) \
 		(base + offsetof(struct chipcregs, field))
 
+struct brcmf_blhs;
+
 /**
  * struct brcmf_chip - chip level information.
  *
@@ -37,6 +39,8 @@ struct brcmf_chip {
 	u32 ramsize;
 	u32 srsize;
 	char name[12];
+	struct brcmf_blhs *blhs;
+	struct brcmf_ccsec *ccsec;
 };
 
 /**
@@ -69,6 +73,44 @@ struct brcmf_buscore_ops {
 	int (*reset)(void *ctx, struct brcmf_chip *chip);
 	int (*setup)(void *ctx, struct brcmf_chip *chip);
 	void (*activate)(void *ctx, struct brcmf_chip *chip, u32 rstvec);
+	int (*sec_attach)(void *ctx, struct brcmf_blhs **blhs, struct brcmf_ccsec **ccsec,
+			  u32 flag, uint timeout, uint interval);
+	int (*get_intr_pend)(void *ctx);
+};
+
+/**
+ * struct brcmf_blhs - bootloader handshake handle related information.
+ *
+ * @d2h: offset of dongle to host register for the handshake.
+ * @h2d: offset of host to dongle register for the handshake.
+ * @init: bootloader handshake initialization.
+ * @prep_fwdl: handshake before firmware download.
+ * @post_fwdl: handshake after firmware download.
+ * @post_nvramdl: handshake after nvram download.
+ * @chk_validation: handshake for firmware validation check.
+ * @post_wdreset: handshake after watchdog reset.
+ * @read: read value with register offset for the handshake.
+ * @write: write value with register offset for the handshake.
+ */
+struct brcmf_blhs {
+	u32 d2h;
+	u32 h2d;
+	void (*init)(struct brcmf_chip *pub);
+	int (*pre_nvramdl)(struct brcmf_chip *pub);
+	int (*prep_fwdl)(struct brcmf_chip *pub);
+	int (*post_fwdl)(struct brcmf_chip *pub);
+	int (*post_nvramdl)(struct brcmf_chip *pub);
+	int (*bp_clk_ack)(struct brcmf_chip *pub);
+	int (*chk_validation)(struct brcmf_chip *pub);
+	int (*post_wdreset)(struct brcmf_chip *pub);
+	u32 (*read)(void *ctx, u32 addr);
+	void (*write)(void *ctx, u32 addr, u32 value);
+};
+
+struct brcmf_ccsec {
+	u32	bus_corebase;
+	u32 erombase;
+	u32 chipid;
 };
 
 int brcmf_chip_get_raminfo(struct brcmf_chip *pub);
