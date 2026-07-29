@@ -40,6 +40,7 @@
 #include "pcie.h"
 #include "firmware.h"
 #include "chip.h"
+#include "trxhdr.h"
 #include "core.h"
 #include "common.h"
 
@@ -145,6 +146,8 @@ static const struct brcmf_firmware_mapping brcmf_pcie_fwnames[] = {
 #define BRCMF_PCIE_PCIE2REG_CONFIGDATA		0x124
 #define BRCMF_PCIE_PCIE2REG_H2D_MAILBOX_0	0x140
 #define BRCMF_PCIE_PCIE2REG_H2D_MAILBOX_1	0x144
+#define BRCMF_PCIE_PCIE2REG_DAR_D2H_MSG_0	0xA80
+#define BRCMF_PCIE_PCIE2REG_DAR_H2D_MSG_0	0xA90
 
 #define BRCMF_PCIE_64_PCIE2REG_INTMASK		0xC14
 #define BRCMF_PCIE_64_PCIE2REG_MAILBOXINT	0xC30
@@ -283,6 +286,8 @@ static const struct brcmf_firmware_mapping brcmf_pcie_fwnames[] = {
 #define BRCMF_PCIE_CFGREG_PML1_SUB_CTRL1	0x248
 #define BRCMF_PCIE_CFGREG_REG_BAR2_CONFIG	0x4E0
 #define BRCMF_PCIE_CFGREG_REG_BAR3_CONFIG	0x4F4
+#define BRCMF_PCIE_CFGREG_REVID			0x6C
+#define BRCMF_PCIE_CFGREG_REVID_SECURE_MODE	BIT(31)
 #define BRCMF_PCIE_LINK_STATUS_CTRL_ASPM_ENAB	3
 
 /* Magic number at a magic location to find RAM size */
@@ -729,8 +734,16 @@ static void brcmf_pcie_attach(struct brcmf_pciedev_info *devinfo)
 }
 
 
+static void brcmf_pcie_bus_console_read(struct brcmf_pciedev_info *devinfo,
+					bool error_check);
+static int brcmf_pcie_bus_readshared(struct brcmf_pciedev_info *devinfo,
+				     u32 nvram_csm);
+
 static int brcmf_pcie_enter_download_state(struct brcmf_pciedev_info *devinfo)
 {
+	struct brcmf_bus *bus = dev_get_drvdata(&devinfo->pdev->dev);
+	int err = 0;
+
 	if (devinfo->ci->chip == BRCM_CC_43602_CHIP_ID) {
 		brcmf_pcie_select_core(devinfo, BCMA_CORE_ARM_CR4);
 		brcmf_pcie_write_reg32(devinfo, BRCMF_PCIE_ARMCR4REG_BANKIDX,
@@ -742,7 +755,26 @@ static int brcmf_pcie_enter_download_state(struct brcmf_pciedev_info *devinfo)
 		brcmf_pcie_write_reg32(devinfo, BRCMF_PCIE_ARMCR4REG_BANKPDA,
 				       0);
 	}
-	return 0;
+
+	/* Secure (BLHS) chips: hand off to the on-chip bootloader before FW
+	 * download.  Non-secure chips leave ci->blhs NULL and are unaffected.
+	 */
+	if (devinfo->ci->blhs) {
+		err = devinfo->ci->blhs->prep_fwdl(devinfo->ci);
+		if (err) {
+			brcmf_err(bus, "FW download preparation failed\n");
+			return err;
+		}
+
+		/* Bring up the dongle console from the bootloader's shared
+		 * struct so bootloader/firmware messages are captured during
+		 * (and after) the download.
+		 */
+		if (!brcmf_pcie_bus_readshared(devinfo, 0))
+			brcmf_pcie_bus_console_read(devinfo, false);
+	}
+
+	return err;
 }
 
 
@@ -756,8 +788,18 @@ static int brcmf_pcie_exit_download_state(struct brcmf_pciedev_info *devinfo,
 		brcmf_chip_resetcore(core, 0, 0, 0);
 	}
 
-	if (!brcmf_chip_set_active(devinfo->ci, resetintr))
-		return -EIO;
+	/* Secure (BLHS) chips: the on-chip bootloader launches the validated
+	 * firmware once the NVRAM-download-done handshake is signalled, so the
+	 * legacy chip_set_active() reset-vector path must not be used for them.
+	 */
+	if (devinfo->ci->blhs) {
+		brcmf_pcie_bus_console_read(devinfo, false);
+		devinfo->ci->blhs->post_nvramdl(devinfo->ci);
+	} else {
+		if (!brcmf_chip_set_active(devinfo->ci, resetintr))
+			return -EIO;
+	}
+
 	return 0;
 }
 
@@ -907,6 +949,38 @@ static void brcmf_pcie_bus_console_read(struct brcmf_pciedev_info *devinfo,
 	}
 }
 
+
+/* Poll the last word of RAM until the dongle writes a valid shared-RAM
+ * address there (secure chips seed it with 0 / the NVRAM token first), then
+ * initialise the dongle console so bootloader/firmware messages can be read.
+ */
+static int brcmf_pcie_bus_readshared(struct brcmf_pciedev_info *devinfo,
+				     u32 nvram_csm)
+{
+	struct brcmf_bus *bus = dev_get_drvdata(&devinfo->pdev->dev);
+	u32 loop_counter;
+	u32 addr_le;
+	u32 addr = 0;
+
+	loop_counter = BRCMF_PCIE_FW_UP_TIMEOUT / 50;
+	while ((addr == 0 || addr == nvram_csm) && (loop_counter)) {
+		msleep(50);
+		addr_le = brcmf_pcie_read_ram32(devinfo,
+						devinfo->ci->ramsize - 4);
+		addr = le32_to_cpu(addr_le);
+		loop_counter--;
+	}
+	if (addr == 0 || addr == nvram_csm || addr < devinfo->ci->rambase ||
+	    addr >= devinfo->ci->rambase + devinfo->ci->ramsize) {
+		brcmf_err(bus, "Invalid shared RAM address 0x%08x\n", addr);
+		return -ENODEV;
+	}
+	devinfo->shared.tcm_base_address = addr;
+	brcmf_dbg(PCIE, "Shared RAM addr: 0x%08x\n", addr);
+
+	brcmf_pcie_bus_console_init(devinfo);
+	return 0;
+}
 
 static void brcmf_pcie_intr_disable(struct brcmf_pciedev_info *devinfo)
 {
@@ -1733,6 +1807,8 @@ static int brcmf_pcie_download_fw_nvram(struct brcmf_pciedev_info *devinfo,
 					u32 nvram_len)
 {
 	struct brcmf_bus *bus = dev_get_drvdata(&devinfo->pdev->dev);
+	struct trx_header_le *trx = (struct trx_header_le *)fw->data;
+	u32 fw_size;
 	u32 sharedram_addr;
 	u32 sharedram_addr_written;
 	u32 loop_counter;
@@ -1748,27 +1824,63 @@ static int brcmf_pcie_download_fw_nvram(struct brcmf_pciedev_info *devinfo,
 		return err;
 
 	brcmf_dbg(PCIE, "Download FW %s\n", devinfo->fw_name);
-	memcpy_toio(devinfo->tcm + devinfo->ci->rambase,
-		    (void *)fw->data, fw->size);
+	address = devinfo->ci->rambase;
+	fw_size = fw->size;
+	if (trx->magic == cpu_to_le32(TRX_MAGIC)) {
+		/* Secure TRX image: the TRX header occupies the reserved
+		 * TRXHDR slot just below rambase, so the firmware code body
+		 * lands exactly at rambase for the on-chip bootloader to
+		 * parse and validate.  (Raw .bin images have no TRX_MAGIC and
+		 * are copied at rambase as before.)
+		 */
+		address -= sizeof(struct trx_header_le);
+		fw_size = le32_to_cpu(trx->len);
+	}
+	memcpy_toio(devinfo->tcm + address, (void *)fw->data, fw_size);
 
 	resetintr = get_unaligned_le32(fw->data);
 	release_firmware(fw);
 
-	/* reset last 4 bytes of RAM address. to be used for shared
-	 * area. This identifies when FW is running
-	 */
-	brcmf_pcie_write_ram32(devinfo, devinfo->ci->ramsize - 4, 0);
+	if (devinfo->ci->blhs) {
+		/* Secure chips: the bootloader parses the TRX header and
+		 * validates the image via the handshake.
+		 */
+		brcmf_pcie_bus_console_read(devinfo, false);
+		err = devinfo->ci->blhs->post_fwdl(devinfo->ci);
+		if (err) {
+			brcmf_err(bus, "FW download failed, err=%d\n", err);
+			return err;
+		}
+
+		err = devinfo->ci->blhs->chk_validation(devinfo->ci);
+		if (err) {
+			brcmf_err(bus, "FW validation failed, err=%d\n", err);
+			return err;
+		}
+	} else {
+		/* reset last 4 bytes of RAM address. to be used for shared
+		 * area. This identifies when FW is running
+		 */
+		brcmf_pcie_write_ram32(devinfo, devinfo->ci->ramsize - 4, 0);
+	}
 
 	if (nvram) {
 		brcmf_dbg(PCIE, "Download NVRAM %s\n", devinfo->nvram_name);
 		address = devinfo->ci->rambase + devinfo->ci->ramsize -
 			  nvram_len;
+		/* Secure chips reserve the final word of RAM for the length
+		 * token, so NVRAM is placed one word lower.
+		 */
+		if (devinfo->ci->blhs)
+			address -= 4;
 		memcpy_toio(devinfo->tcm + address, nvram, nvram_len);
-		brcmf_fw_nvram_free(nvram);
 
 		/* Compute NVRAM checksum/length token for Cypress firmware */
 		nvram_lenw = nvram_len / 4;
+		if (!devinfo->ci->blhs)
+			nvram_lenw -= 1;
 		nvram_csm = (~nvram_lenw << 16) | (nvram_lenw & 0x0000FFFF);
+		brcmf_fw_nvram_free(nvram);
 
 		if (devinfo->fwseed) {
 			size_t rand_len = BRCMF_RANDOM_SEED_LENGTH;
@@ -1795,12 +1907,10 @@ static int brcmf_pcie_download_fw_nvram(struct brcmf_pciedev_info *devinfo,
 			  devinfo->nvram_name);
 	}
 
-	/* Cypress TRXSE firmware (cypress/ path prefix) requires the NVRAM
-	 * length token written to ramsize-4 and entropy data before NVRAM.
-	 * This is generic: any chip using CY_FW_TRXSE_DEF gets this.
-	 */
-	if (!strncmp(devinfo->fw_name, CY_FW_DEFAULT_PATH,
-		     strlen(CY_FW_DEFAULT_PATH))) {
+	if (devinfo->ci->chip == CY_CC_55572_CHIP_ID) {
+		/* Write the NVRAM length token to the last word of RAM, and
+		 * entropy data before NVRAM (firmware randomizes its heap).
+		 */
 		brcmf_pcie_write_ram32(devinfo, devinfo->ci->ramsize - 4,
 				       cpu_to_le32(nvram_csm));
 		brcmf_pcie_write_rand(devinfo, nvram_csm);
@@ -1817,15 +1927,27 @@ static int brcmf_pcie_download_fw_nvram(struct brcmf_pciedev_info *devinfo,
 	brcmf_dbg(PCIE, "Wait for FW init\n");
 	sharedram_addr = sharedram_addr_written;
 	loop_counter = BRCMF_PCIE_FW_UP_TIMEOUT / 50;
-	while ((sharedram_addr == sharedram_addr_written) && (loop_counter)) {
+	/* The firmware signals it is up by writing the shared-RAM address into
+	 * the last word of RAM.  Secure (BLHS) chips seed that word with the
+	 * NVRAM length token (nvram_csm) and may transiently read back 0 before
+	 * the real address appears, so treat both the seeded token and 0 as
+	 * "not ready yet".  (Legacy chips seed it with 0, so this is a no-op for
+	 * them: sharedram_addr_written is already 0.)
+	 */
+	while ((sharedram_addr == sharedram_addr_written ||
+		sharedram_addr == 0) && (loop_counter)) {
 		msleep(50);
 		sharedram_addr = brcmf_pcie_read_ram32(devinfo,
 						       devinfo->ci->ramsize -
 						       4);
 		loop_counter--;
 	}
-	if (sharedram_addr == sharedram_addr_written) {
+	if (sharedram_addr == sharedram_addr_written || sharedram_addr == 0) {
 		brcmf_err(bus, "FW failed to initialize\n");
+		/* Dump whatever the bootloader/firmware left on its console to
+		 * reveal why it never came up (unconditional print).
+		 */
+		brcmf_pcie_bus_console_read(devinfo, true);
 		return -ENODEV;
 	}
 	if (sharedram_addr < devinfo->ci->rambase ||
@@ -1965,6 +2087,78 @@ static void brcmf_pcie_buscore_activate(void *ctx, struct brcmf_chip *chip,
 	brcmf_pcie_write_tcm32(devinfo, 0, rstvec);
 }
 
+static u32 brcmf_pcie_buscore_blhs_read(void *ctx, u32 reg_offset)
+{
+	struct brcmf_pciedev_info *devinfo = (struct brcmf_pciedev_info *)ctx;
+
+	brcmf_pcie_select_core(devinfo, BCMA_CORE_PCIE2);
+	return brcmf_pcie_read_reg32(devinfo, reg_offset);
+}
+
+static void brcmf_pcie_buscore_blhs_write(void *ctx, u32 reg_offset, u32 value)
+{
+	struct brcmf_pciedev_info *devinfo = (struct brcmf_pciedev_info *)ctx;
+
+	brcmf_pcie_select_core(devinfo, BCMA_CORE_PCIE2);
+	brcmf_pcie_write_reg32(devinfo, reg_offset, value);
+}
+
+/* Detect a secure-mode Cypress PCIe device and, if present, allocate a
+ * bootloader-handshake (BLHS) handle providing the PCIe register accessors.
+ * Non-Cypress or non-secure devices leave *blhs NULL, so all other chips
+ * (and all SDIO/USB devices, which never install this op) keep their legacy
+ * firmware-download path unchanged.
+ */
+static int
+brcmf_pcie_buscore_sec_attach(void *ctx, struct brcmf_blhs **blhs, struct brcmf_ccsec **ccsec,
+			      u32 flag, uint timeout, uint interval)
+{
+	struct brcmf_pciedev_info *devinfo = (struct brcmf_pciedev_info *)ctx;
+	struct brcmf_bus *bus = dev_get_drvdata(&devinfo->pdev->dev);
+	struct brcmf_blhs *blhsh;
+	u32 regdata;
+	u32 pcie_enum;
+	u32 addr;
+
+	if (devinfo->pdev->vendor != CY_PCIE_VENDOR_ID_CYPRESS)
+		return 0;
+
+	pci_read_config_dword(devinfo->pdev, BRCMF_PCIE_CFGREG_REVID, &regdata);
+	if (regdata & BRCMF_PCIE_CFGREG_REVID_SECURE_MODE) {
+		blhsh = kzalloc(sizeof(*blhsh), GFP_KERNEL);
+		if (!blhsh)
+			return -ENOMEM;
+
+		blhsh->d2h = BRCMF_PCIE_PCIE2REG_DAR_D2H_MSG_0;
+		blhsh->h2d = BRCMF_PCIE_PCIE2REG_DAR_H2D_MSG_0;
+		blhsh->read = brcmf_pcie_buscore_blhs_read;
+		blhsh->write = brcmf_pcie_buscore_blhs_write;
+
+		/* Host indication for bootloader to start the init */
+		if (devinfo->pdev->device == CY_PCIE_55572_DEVICE_ID)
+			pcie_enum = BRCMF_CYW55572_PCIE_BAR0_PCIE_ENUM_OFFSET;
+		else
+			pcie_enum = BRCMF_PCIE_BAR0_PCIE_ENUM_OFFSET;
+
+		pci_read_config_dword(devinfo->pdev, PCI_BASE_ADDRESS_0,
+				      &regdata);
+		addr = regdata + pcie_enum + blhsh->h2d;
+		brcmf_pcie_buscore_write32(ctx, addr, 0);
+
+		addr = regdata + pcie_enum + blhsh->d2h;
+		SPINWAIT_MS((brcmf_pcie_buscore_read32(ctx, addr) & flag) == 0,
+			    timeout, interval);
+		regdata = brcmf_pcie_buscore_read32(ctx, addr);
+		if (!(regdata & flag)) {
+			brcmf_err(bus, "Timeout waiting for bootloader ready\n");
+			kfree(blhsh);
+			return -EPERM;
+		}
+		*blhs = blhsh;
+	}
+
+	return 0;
+}
 
 static const struct brcmf_buscore_ops brcmf_pcie_buscore_ops = {
 	.prepare = brcmf_pcie_buscoreprep,
@@ -1972,6 +2166,7 @@ static const struct brcmf_buscore_ops brcmf_pcie_buscore_ops = {
 	.activate = brcmf_pcie_buscore_activate,
 	.read32 = brcmf_pcie_buscore_read32,
 	.write32 = brcmf_pcie_buscore_write32,
+	.sec_attach = brcmf_pcie_buscore_sec_attach,
 };
 
 #define BRCMF_OTP_SYS_VENDOR	0x15
