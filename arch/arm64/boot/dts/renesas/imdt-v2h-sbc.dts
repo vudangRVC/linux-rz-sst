@@ -132,7 +132,16 @@
 	ranges = <0x03000000 0x0 0x38000000 0x0 0x38000000 0x0 0x08000000>;
 	dma-ranges = <0x42000000 0 0x40000000 0 0x40000000 0x4 0x00000000>;
 	vdd-supply = <&VM2M_3V3>;
-	status = "okay";
+	/*
+	 * Disabled for two reasons:
+	 *  1. The M.2 Key-B slot is on pcie1 (lanes 2/3) and requires 2x2 mode,
+	 *     which this PCIe driver does not support, so it never links.
+	 *  2. While enabled, pcie1 is a *second* consumer of the shared M.2 rail
+	 *     VM2M_3V3 (regulator_summary showed use_count=2), which pins the rail
+	 *     on. Leaving pcie0 as the sole owner lets its power-cycle actually
+	 *     toggle the rail, so Key-E modules get a clean power-vs-reset sequence.
+	 */
+	status = "disabled";
 };
 
 &xhci1 {
