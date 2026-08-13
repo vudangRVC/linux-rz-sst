@@ -163,23 +163,21 @@
 	/* ---------------------------------------------------------------- */
 	/* Remote processors                                                */
 	/* ---------------------------------------------------------------- */
+};
 
-	soc: soc {
-		cm33_rproc: cm33 {
-			memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
-			status = "okay";
-		};
+&cm33_rproc {
+	memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
+	status = "okay";
+};
 
-		cr8_0_rproc: cr8_0 {
-			memory-region = <&vdev1vring0>, <&vdev1vring1>, <&vdev1buffer>;
-			status = "okay";
-		};
+&cr8_0_rproc {
+	memory-region = <&vdev1vring0>, <&vdev1vring1>, <&vdev1buffer>;
+	status = "okay";
+};
 
-		cr8_1_rproc: cr8_1 {
-			memory-region = <&vdev2vring0>, <&vdev2vring1>, <&vdev2buffer>;
-			status = "okay";
-		};
-	};
+&cr8_1_rproc {
+	memory-region = <&vdev2vring0>, <&vdev2vring1>, <&vdev2buffer>;
+	status = "okay";
 
 	/* ---------------------------------------------------------------- */
 	/* Reserved memory carveouts                                        */

@@ -71,10 +71,9 @@
 		};
 	};
 
-	soc: soc {
-		cm33_rproc: cm33 {
-			memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
-			status = "okay";
-		};
-	};
+};
+
+&cm33_rproc {
+	memory-region = <&vdev0vring0>, <&vdev0vring1>, <&vdev0buffer>;
+	status = "okay";
 };
